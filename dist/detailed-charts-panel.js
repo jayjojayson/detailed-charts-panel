@@ -1,4 +1,4 @@
-console.log("DetailedChartsPanel: v_1.0 ");
+console.log("DetailedChartsPanel: v_1.1");
 
 class DetailedChartsPanel extends HTMLElement {
   constructor() {
@@ -12,6 +12,7 @@ class DetailedChartsPanel extends HTMLElement {
     this.chartInstances = []; 
     this.fillArea = false;
     this.splitCharts = false;
+    this.gridColumns = 1;
   }
 
   set hass(hass) {
@@ -76,36 +77,26 @@ class DetailedChartsPanel extends HTMLElement {
         .sensor-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .remove-sensor { cursor: pointer; color: var(--error-color, #f44336); font-weight: bold; padding: 0 8px; }
 
-        /* --- HA STYLE TOGGLES (NEU) --- */
+        /* TOGGLES */
         .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; cursor: pointer; }
         .toggle-label { font-size: 14px; color: var(--primary-text-color); }
-        
-        .toggle-switch {
-            appearance: none; -webkit-appearance: none;
-            width: 40px; height: 24px;
-            background: rgba(120, 120, 128, 0.3); /* Inactive Gray */
-            border-radius: 12px;
-            position: relative;
-            cursor: pointer;
-            outline: none;
-            border: none;
-            transition: background 0.25s;
+        .toggle-switch { 
+            appearance: none; -webkit-appearance: none; width: 40px; height: 24px; flex-shrink: 0;
+            background: rgba(120, 120, 128, 0.3); border-radius: 12px; position: relative; cursor: pointer; outline: none; border: none; transition: background 0.25s;
         }
-        .toggle-switch::after {
-            content: ''; position: absolute;
-            top: 2px; left: 2px;
-            width: 20px; height: 20px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.25s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        .toggle-switch:checked { background: var(--accent-color); }
+        .toggle-switch::after { 
+            content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.25s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); 
         }
-        .toggle-switch:checked {
-            background: var(--accent-color);
-        }
-        .toggle-switch:checked::after {
-            transform: translateX(16px);
-        }
+        .toggle-switch:checked::after { transform: translateX(16px); }
+
+        /* SLIDER */
+        .slider-row { margin-top: 15px; border-top: 1px solid var(--divider-color); padding-top: 15px; display: none; }
+        .slider-row.visible { display: block; }
+        .slider-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 6px; background: var(--divider-color); border-radius: 3px; outline: none; padding: 0; border: none; margin-top: 5px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-color); cursor: pointer; transition: transform 0.1s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.1); }
 
         .mode-switch { display: flex; gap: 0; margin-bottom: 10px; border: 1px solid var(--divider-color); border-radius: 4px; overflow: hidden; }
         .mode-btn { flex: 1; padding: 10px; font-size: 13px; text-align: center; cursor: pointer; background: var(--card-background-color); color: var(--secondary-text-color); transition: all 0.2s; font-weight: 500; }
@@ -123,6 +114,13 @@ class DetailedChartsPanel extends HTMLElement {
         /* MAIN CONTENT */
         .main-content { flex-grow: 1; padding: 40px; display: flex; flex-direction: column; background-color: var(--primary-background-color); overflow-y: auto; position: relative; }
         
+        /* GRID LOGIC */
+        #main-content-area.grid-active {
+            display: grid;
+            gap: 20px;
+            align-content: start; 
+        }
+
         .chart-container-outer { width: 100%; height: 450px; min-height: 200px; position: relative; background: var(--card-background-color); border-radius: 8px; padding: 15px; box-sizing: border-box; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid var(--divider-color); display: flex; flex-direction: column; }
         .canvas-wrapper { flex-grow: 1; position: relative; width: 100%; height: 100%; overflow: hidden; }
         #resize-handle { height: 14px; width: 100%; background: var(--card-background-color); cursor: ns-resize; display: flex; align-items: center; justify-content: center; border-top: 1px solid var(--divider-color); margin-top: 5px; }
@@ -131,10 +129,10 @@ class DetailedChartsPanel extends HTMLElement {
         
         .stats-wrapper { margin-top: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
         
-        /* STATS CARD (COMBINED VIEW) - Hintergrund wie Diagramm */
+        /* STATS CARD (COMBINED) */
         .stats-card { 
             padding: 15px; 
-            background: var(--card-background-color); /* Fester Hintergrund */
+            background: var(--card-background-color); 
             border-left: 5px solid transparent; 
             border-radius: 4px; 
             font-size: 1rem; line-height: 1.5em; 
@@ -143,31 +141,19 @@ class DetailedChartsPanel extends HTMLElement {
             border-left-width: 5px;
         }
 
-        /* SPLIT VIEW CARDS */
+        /* SPLIT VIEW */
         .split-chart-card {
-            background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; padding: 15px; margin-bottom: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background: var(--card-background-color); border: 1px solid var(--divider-color); border-radius: 8px; padding: 15px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 0; 
+            height: fit-content;
         }
         .split-chart-header { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
         .split-canvas-container { height: 300px; position: relative; width: 100%; }
-        
-        /* SPLIT FOOTER */
         .split-footer { display: flex; gap: 20px; margin-top: 10px; align-items: stretch; border-top: 1px solid var(--divider-color); padding-top: 15px; }
-        
-        /* STATS IN SPLIT VIEW - Transparent & Clean */
-        .split-stats-box {
-            flex-grow: 1; 
-            background: transparent; /* Transparent wie gewünscht */
-            border-radius: 0; 
-            padding: 5px 0;
-            display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; text-align: center; border: none;
-        }
-        
+        .split-stats-box { flex-grow: 1; background: transparent; border-radius: 0; padding: 5px 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; text-align: center; border: none; }
         .split-controls-box { width: 120px; display: flex; flex-direction: column; gap: 5px; justify-content: center; border-left: 1px solid var(--divider-color); padding-left: 15px; }
-        
-        .chart-toggle-btn {
-            background: transparent; border: 1px solid var(--divider-color); color: var(--secondary-text-color);
-            padding: 6px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s;
-        }
+        .chart-toggle-btn { background: transparent; border: 1px solid var(--divider-color); color: var(--secondary-text-color); padding: 6px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
         .chart-toggle-btn:hover { background: rgba(0,0,0,0.05); color: var(--primary-text-color); }
         .chart-toggle-btn.active { background: var(--btn-color); color: white; border-color: var(--btn-color); }
 
@@ -179,10 +165,12 @@ class DetailedChartsPanel extends HTMLElement {
         .loader { border: 3px solid rgba(0,0,0,0.1); border-top: 3px solid var(--accent-color); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; margin: 10px auto; display: none; }
         .error-msg { color: #f44336; background: rgba(244, 67, 54, 0.1); padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 13px; display: none; border: 1px solid rgba(244, 67, 54, 0.3); }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
         @media (max-width: 1000px) { 
             .stats-wrapper { grid-template-columns: 1fr; } 
             .split-footer { flex-direction: column; }
             .split-controls-box { width: 100%; flex-direction: row; border-left: none; border-top: 1px solid var(--divider-color); padding-left: 0; padding-top: 10px; }
+            #main-content-area.grid-active { grid-template-columns: 1fr !important; }
         }
       </style>
 
@@ -213,6 +201,13 @@ class DetailedChartsPanel extends HTMLElement {
               <div class="toggle-row" id="toggle-split-row">
                   <span class="toggle-label">Einzelne Diagramme</span>
                   <input type="checkbox" class="toggle-switch" id="split-switch">
+              </div>
+              <div class="slider-row" id="grid-slider-row">
+                  <div class="slider-header">
+                      <label>Spalten (Grid)</label>
+                      <span id="grid-value-display" style="font-weight:bold;">1</span>
+                  </div>
+                  <input type="range" id="grid-slider" min="1" max="4" step="1" value="1">
               </div>
           </div>
 
@@ -282,12 +277,39 @@ class DetailedChartsPanel extends HTMLElement {
     inputs.forEach(id => {
         this.content.querySelector(id).addEventListener('change', (e) => {
             if (id === '#fill-switch') this.fillArea = e.target.checked;
-            if (id === '#split-switch') this.splitCharts = e.target.checked;
+            
+            if (id === '#split-switch') {
+                this.splitCharts = e.target.checked;
+                this.updateSliderVisibility();
+            }
+            
             this.saveSettings(); 
+            
             if (this._cachedData && (id === '#chart-type' || id === '#fill-switch' || id === '#split-switch')) {
                 this.updateChartFromCache();
             }
         });
+    });
+
+    // AUTO UPDATE ON TIME CHANGE
+    ['#time-select', '#date-start', '#date-end'].forEach(id => {
+        this.content.querySelector(id).addEventListener('change', (e) => {
+            this.saveSettings(); 
+            this.loadHistory(); 
+        });
+    });
+
+    // Slider
+    const gridSlider = this.content.querySelector('#grid-slider');
+    gridSlider.addEventListener('input', (e) => {
+        this.gridColumns = parseInt(e.target.value);
+        this.content.querySelector('#grid-value-display').textContent = this.gridColumns;
+    });
+    gridSlider.addEventListener('change', (e) => {
+        this.saveSettings();
+        if (this._cachedData && this.splitCharts) {
+            this.updateChartFromCache();
+        }
     });
 
     const setMode = (mode) => { this.switchTimeMode(mode); this.saveSettings(); };
@@ -307,7 +329,14 @@ class DetailedChartsPanel extends HTMLElement {
     }
   }
 
-  // --- DEPENDENCIES ---
+  // --- LOGIC ---
+  
+  updateSliderVisibility() {
+      const row = this.content.querySelector('#grid-slider-row');
+      if (this.splitCharts) row.classList.add('visible');
+      else row.classList.remove('visible');
+  }
+
   loadDependencies() {
       const loadScript = (src) => new Promise((resolve, reject) => {
           const script = document.createElement('script');
@@ -322,11 +351,17 @@ class DetailedChartsPanel extends HTMLElement {
 
       Promise.all([p1, p2])
         .then(() => loadScript('/local/community/detailed-charts-panel/chartjs-plugin-zoom.min.js'))
-        .then(() => { console.log("Libs ready."); this.libsLoaded = true; })
+        .then(() => { 
+            console.log("Libs ready."); 
+            this.libsLoaded = true; 
+            // AUTO START
+            if(this.selectedSensors.length > 0) {
+                this.loadHistory();
+            }
+        })
         .catch(err => { console.error(err); this.showError("Fehler beim Laden der Libs."); });
   }
 
-  // --- SETTINGS ---
   saveSettings() {
       try {
           const settings = {
@@ -337,7 +372,8 @@ class DetailedChartsPanel extends HTMLElement {
               dateStart: this.content.querySelector('#date-start').value,
               dateEnd: this.content.querySelector('#date-end').value,
               fillArea: this.fillArea,
-              splitCharts: this.splitCharts
+              splitCharts: this.splitCharts,
+              gridColumns: this.gridColumns
           };
           const singleContainer = this.content.querySelector('#chart-container-single');
           if (singleContainer) settings.containerHeight = singleContainer.style.height;
@@ -356,13 +392,27 @@ class DetailedChartsPanel extends HTMLElement {
           if (settings.dateStart) this.content.querySelector('#date-start').value = settings.dateStart;
           if (settings.dateEnd) this.content.querySelector('#date-end').value = settings.dateEnd;
           if (settings.timeMode) this.switchTimeMode(settings.timeMode);
-          if (settings.fillArea !== undefined) { this.fillArea = settings.fillArea; this.content.querySelector('#fill-switch').checked = settings.fillArea; }
-          if (settings.splitCharts !== undefined) { this.splitCharts = settings.splitCharts; this.content.querySelector('#split-switch').checked = settings.splitCharts; }
+          
+          if (settings.fillArea !== undefined) { 
+              this.fillArea = settings.fillArea; 
+              this.content.querySelector('#fill-switch').checked = settings.fillArea; 
+          }
+          if (settings.splitCharts !== undefined) { 
+              this.splitCharts = settings.splitCharts; 
+              this.content.querySelector('#split-switch').checked = settings.splitCharts; 
+              this.updateSliderVisibility();
+          }
+          if (settings.gridColumns) {
+              this.gridColumns = settings.gridColumns;
+              this.content.querySelector('#grid-slider').value = settings.gridColumns;
+              this.content.querySelector('#grid-value-display').textContent = settings.gridColumns;
+          }
+          
           this.savedContainerHeight = settings.containerHeight; 
       } catch (e) { localStorage.removeItem(this.STORAGE_KEY); }
   }
 
-  // --- UI LOGIC ---
+  // --- UI ---
   switchTimeMode(mode) {
       this.timeMode = mode;
       const rel = this.content.querySelector('#container-relative');
@@ -373,22 +423,43 @@ class DetailedChartsPanel extends HTMLElement {
       else { rel.style.display='none'; fix.classList.add('visible'); bRel.classList.remove('active'); bFix.classList.add('active'); }
   }
 
-  addSensor() {
+  // --- SMART ADD SENSOR ---
+  async addSensor() {
       const input = this.content.querySelector('#sensor-input');
       const entityId = input.value.trim();
       const color = this.content.querySelector('#color-input').value;
-      if (!entityId || this.selectedSensors.some(s => s.entityId === entityId)) return;
+      
+      if (!entityId) return;
+      if (this.selectedSensors.some(s => s.entityId === entityId)) {
+          alert("Sensor ist bereits in der Liste.");
+          return;
+      }
+
       this.selectedSensors.push({ entityId, color });
       input.value = '';
       this.content.querySelector('#color-input').value = this.getRandomColor();
       this.renderSensorListUI();
       this.saveSettings();
+
+      if (this._cachedData && this._cachedStartTime && this._cachedEndTime) {
+          const loader = this.content.querySelector('#loader');
+          loader.style.display = 'block';
+          try {
+              const data = await this._hass.callApi('GET', `history/period/${this._cachedStartTime.toISOString()}?end_time=${this._cachedEndTime.toISOString()}&filter_entity_id=${entityId}&minimal_response`);
+              if (data && data.length > 0) { this._cachedData.push(data[0]); } else { this._cachedData.push([]); }
+              this.updateChartFromCache();
+          } catch (e) { console.error(e); this.loadHistory(); } finally { loader.style.display = 'none'; }
+      } else {
+          this.loadHistory();
+      }
   }
 
   removeSensor(index) {
       this.selectedSensors.splice(index, 1);
+      if (this._cachedData && this._cachedData.length > index) { this._cachedData.splice(index, 1); }
       this.renderSensorListUI();
       this.saveSettings();
+      if (this._cachedData && this._cachedData.length > 0) { this.updateChartFromCache(); } else { this.destroyAllCharts(); this.content.querySelector('#main-content-area').innerHTML = ''; }
   }
 
   renderSensorListUI() {
@@ -422,14 +493,26 @@ class DetailedChartsPanel extends HTMLElement {
       this.content.querySelector('#loader').style.display = 'none';
   }
 
-  // --- CHART RENDERING ---
   updateChartFromCache() {
       if (!this._cachedData) return;
       const chartType = this.content.querySelector('#chart-type').value;
       const dh = (this._cachedEndTime - this._cachedStartTime) / 3600000;
       if (chartType === 'scatter' && dh > 24.1) { alert("Scatter nur <= 24h."); return; }
-      
       this.renderDispatcher(this._cachedData, chartType, this._cachedStartTime, this._cachedEndTime);
+  }
+
+  // --- NEW: LOAD SPECIFIC RANGE (For Pan) ---
+  async loadSpecificRange(newStart, newEnd) {
+      this._cachedStartTime = newStart;
+      this._cachedEndTime = newEnd;
+      this.content.querySelector('#loader').style.display = 'block';
+      
+      const entityIds = this.selectedSensors.map(s => s.entityId).join(',');
+      try {
+          const data = await this._hass.callApi('GET', `history/period/${newStart.toISOString()}?end_time=${newEnd.toISOString()}&filter_entity_id=${entityIds}&minimal_response`);
+          this._cachedData = data;
+          this.updateChartFromCache();
+      } catch (e) { console.error(e); } finally { this.content.querySelector('#loader').style.display = 'none'; }
   }
 
   async loadHistory() {
@@ -454,23 +537,19 @@ class DetailedChartsPanel extends HTMLElement {
 
       if (chartType === 'scatter' && dh > 24.1) { this.showError("Scatter nur <= 24h."); return; }
 
-      loader.style.display = 'block';
-      const entityIds = this.selectedSensors.map(s => s.entityId).join(',');
-
-      try {
-          const data = await this._hass.callApi('GET', `history/period/${st.toISOString()}?end_time=${et.toISOString()}&filter_entity_id=${entityIds}&minimal_response`);
-          loader.style.display = 'none';
-          if (data && data.length > 0) {
-              this._cachedData = data; this._cachedStartTime = st; this._cachedEndTime = et;
-              this.renderDispatcher(data, chartType, st, et);
-          } else { this.showError("Keine Daten gefunden."); }
-      } catch (e) { console.error(e); this.showError(`Fehler: ${e.message}`); }
+      this.loadSpecificRange(st, et);
   }
 
   renderDispatcher(data, globalChartType, startTime, endTime) {
       this.destroyAllCharts();
       const mainArea = this.content.querySelector('#main-content-area');
       mainArea.innerHTML = ''; 
+      
+      mainArea.className = 'main-content'; 
+      mainArea.style.display = 'block';
+      mainArea.style.gridTemplateColumns = '';
+      mainArea.style.gap = '';
+      mainArea.style.alignContent = '';
 
       if (this.splitCharts && globalChartType !== 'doughnut' && globalChartType !== 'radar') {
           this.renderSplitView(data, globalChartType, startTime, endTime, mainArea);
@@ -499,6 +578,7 @@ class DetailedChartsPanel extends HTMLElement {
           </div>
           <div id="stats-wrapper" class="stats-wrapper"></div>
       `;
+      wrapper.style.width = '100%';
       container.appendChild(wrapper);
       
       const chartContainer = wrapper.querySelector('#chart-container-single');
@@ -549,6 +629,12 @@ class DetailedChartsPanel extends HTMLElement {
   }
 
   renderSplitView(data, globalChartType, startTime, endTime, container) {
+      container.classList.add('grid-active');
+      container.style.display = 'grid';
+      container.style.gridTemplateColumns = `repeat(${this.gridColumns}, 1fr)`;
+      container.style.gap = '20px';
+      container.style.alignContent = 'start'; 
+
       data.forEach((history, idx) => {
           const conf = this.selectedSensors[idx];
           if (!conf || !history.length) return;
@@ -710,7 +796,17 @@ class DetailedChartsPanel extends HTMLElement {
                       }
                   },
                   zoom: {
-                      pan: { enabled: true, mode: 'x', onPan: () => { if(showZoomBtn) resetBtn.style.display = 'block'; } },
+                      pan: { enabled: true, mode: 'x', onPan: () => { if(showZoomBtn) resetBtn.style.display = 'block'; }, 
+                             onPanComplete: ({chart}) => { 
+                                 // INFINITE PANNING MAGIC
+                                 const min = chart.scales.x.min;
+                                 const max = chart.scales.x.max;
+                                 // Check if we panned outside cached range
+                                 if (min < this._cachedStartTime.getTime() || max > this._cachedEndTime.getTime()) {
+                                     this.loadSpecificRange(new Date(min), new Date(max));
+                                 }
+                             } 
+                      },
                       zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x', onZoom: () => { if(showZoomBtn) resetBtn.style.display = 'block'; } }
                   }
               },
