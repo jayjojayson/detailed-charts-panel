@@ -24,13 +24,26 @@ const en = {
     doughnut: "Doughnut (Distribution)",
     stepped: "Stepped",
     scatter: "Scatter (Points)",
-    threshold1: "Reference Line 1 (Value):",
-    threshold2: "Reference Line 2 (Value):",
+    stackedArea: "Stacked Area",
+    refLinesSection: "Reference Lines",
+    refLineValue: "Value",
+    refLineAlias: "Label",
+    addRefLineBtn: "+ ADD REFERENCE LINE",
+    yMinLabel: "Y-Axis Min",
+    yMaxLabel: "Y-Axis Max",
+    yMinTitle: "Minimum Y-axis value. Leave empty for autoscale.",
+    yMaxTitle: "Maximum Y-axis value. Leave empty for autoscale.",
+    autoPlaceholder: "auto",
     autoScale: "Auto-Scale (W ➡ kW)",
     compareYear: "Compare w/ prev. Year",
     fillArea: "Fill area",
     hideAxisLabels: "Hide axis labels",
     hideGrid: "Hide gridlines",
+    hideLegend: "Hide legend",
+    hideMonoBtn: "Hide highlight min/max button",
+    dateFormat: "Date format",
+    dateFormatDMY: "Day.Month (31.12)",
+    dateFormatMDY: "Month/Day (12/31)",
     stackedBars: "Stacked Bars",
     timePeriodMode: "Time Period Mode:",
     relative: "Relative",
@@ -114,7 +127,7 @@ const en = {
     layoutLabel: "Layout",
     zoomLabel: "Zoom",
     columnsLabel: "Columns",
-    thresholdLabel: "Reference Line (Value)",
+    refLinesLabel: "Reference Lines",
     modeLabel: "Mode",
     windowLabel: "Window",
     startLabel: "Start",
@@ -122,7 +135,21 @@ const en = {
     fillAreaLabel: "Fill area",
     statisticsLabel: "Statistics",
     sensorLabel: "Sensor",
-    addSensorBtn: "+ ADD SENSOR"
+    aliasLabel: "Alias",
+    aliasPlaceholder: "Display name (leave empty for default)",
+    addSensorBtn: "+ ADD SENSOR",
+    rerollColors: "Shuffle colors",
+    showPeaks: "Peak markers (min/max/current)",
+    showNowLine: "Now line",
+    showDayNight: "Day/night shading",
+    peakMax: "Max",
+    peakMin: "Min",
+    peakLast: "Now",
+    nowLabel: "Now",
+    area: "Area",
+    device: "Device",
+    addAllInGroup: "Add all sensors",
+    addSelected: "Add selection",
 };
 
 /* lang-de.js - German translations */
@@ -151,13 +178,26 @@ const de = {
     doughnut: "Donut (Verteilung)",
     stepped: "Stepped (Stufen)",
     scatter: "Scatter (Punkte)",
-    threshold1: "Referenzlinie 1 (Wert):",
-    threshold2: "Referenzlinie 2 (Wert):",
+    stackedArea: "Stacked Area (gestapelt)",
+    refLinesSection: "Referenzlinien",
+    refLineValue: "Wert",
+    refLineAlias: "Bezeichnung",
+    addRefLineBtn: "+ REFERENZLINIE HINZUFÜGEN",
+    yMinLabel: "Y-Achse Min",
+    yMaxLabel: "Y-Achse Max",
+    yMinTitle: "Minimalwert Y-Achse. Leer lassen für Auto-Skalierung.",
+    yMaxTitle: "Maximalwert Y-Achse. Leer lassen für Auto-Skalierung.",
+    autoPlaceholder: "auto",
     autoScale: "Auto-Scale (W ➡ kW)",
     compareYear: "Vorjahresvergleich",
     fillArea: "Fläche füllen",
     hideAxisLabels: "Achsen-Text ausblenden",
     hideGrid: "Gitterlinien ausblenden",
+    hideLegend: "Legende ausblenden",
+    hideMonoBtn: "Min/Max-Hervorhebungsschaltfläche ausblenden",
+    dateFormat: "Datumsformat",
+    dateFormatDMY: "Tag.Monat (31.12)",
+    dateFormatMDY: "Monat/Tag (12/31)",
     stackedBars: "Stacked Bars",
     timePeriodMode: "Zeitraum Modus:",
     relative: "Relativ",
@@ -241,7 +281,7 @@ const de = {
     layoutLabel: "Layout",
     zoomLabel: "Zoom",
     columnsLabel: "Spalten",
-    thresholdLabel: "Referenzlinie (Wert)",
+    refLinesLabel: "Referenzlinien",
     modeLabel: "Modus",
     windowLabel: "Fenster",
     startLabel: "Start",
@@ -249,7 +289,21 @@ const de = {
     fillAreaLabel: "Fläche füllen",
     statisticsLabel: "Statistiken",
     sensorLabel: "Sensor",
-    addSensorBtn: "+ SENSOR HINZUFÜGEN"
+    aliasLabel: "Alias",
+    aliasPlaceholder: "Anzeigename (leer für Standard)",
+    addSensorBtn: "+ SENSOR HINZUFÜGEN",
+    rerollColors: "Farben neu würfeln",
+    showPeaks: "Peak-Marker (Min/Max/Aktuell)",
+    showNowLine: "Jetzt-Linie",
+    showDayNight: "Tag/Nacht-Schattierung",
+    peakMax: "Max",
+    peakMin: "Min",
+    peakLast: "Akt.",
+    nowLabel: "Jetzt",
+    area: "Bereich",
+    device: "Gerät",
+    addAllInGroup: "Alle Sensoren hinzufügen",
+    addSelected: "Auswahl hinzufügen",
 };
 
 /* detailed-charts-panel-langs.js */
@@ -287,11 +341,36 @@ function cleanName(name) {
     return name.replace(/^(sensor|binary_sensor|input_number)\./, '');
 }
 
-function getRandomColor() {
-    const l = '0123456789ABCDEF';
-    let c = '#';
-    for (let i = 0; i < 6; i++) c += l[Math.floor(Math.random() * 16)];
-    return c;
+/* HSL -> Hex (h in deg, s/l in %) */
+function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => {
+        const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return Math.round(255 * c).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/* Harmonious, theme-friendly palette. Hues spread via the golden angle,
+   medium saturation/lightness so colors stay readable on light AND dark themes.
+   startHue lets the caller reshuffle ("re-roll") while keeping the spacing. */
+function generatePalette(count, startHue = 0) {
+    const colors = [];
+    const golden = 137.508;
+    for (let i = 0; i < count; i++) {
+        const hue = (startHue + i * golden) % 360;
+        const sat = 65 + (i % 2) * 10;    // 65 / 75
+        const light = 56 + (i % 3) * 4;   // 56 / 60 / 64
+        colors.push(hslToHex(hue, sat, light));
+    }
+    return colors;
+}
+
+/* Deterministic single color for the sensor at position index (stable ordering). */
+function paletteColorAt(index) {
+    return generatePalette(index + 1)[index];
 }
 
 function hexToRgba(hex, alpha) {
@@ -315,6 +394,12 @@ function calculateEnergySum(values, isAggregated) {
         if (diff > 0) sum += diff;
     }
     return sum;
+}
+
+/* Detects cumulative meter sensors (energy, water m³, gas ...): unit Wh/kWh or state_class total/total_increasing. */
+function isCumulativeSensor(unit, stateClass) {
+    if (stateClass === 'total_increasing' || stateClass === 'total') return true;
+    return !!(unit && (unit.includes('Wh') || unit.includes('kWh')));
 }
 
 /* --- DATA PROCESSING --- */
@@ -367,19 +452,34 @@ function aggregateToDaily(historyData, isEnergy) {
     });
 }
 
-function aggregateToHourly(historyData) {
+function aggregateToHourly(historyData, isEnergy) {
     const buckets = {};
+    const ensure = (key) => { if (!buckets[key]) buckets[key] = { sum: 0, count: 0 }; return buckets[key]; };
+    if (isEnergy) {
+        // Cumulative meters: consumption per hour = sum of positive diffs, boundary diff counted in the later hour
+        let prev = null;
+        historyData.forEach(pt => {
+            const pVal = parseState(pt.state);
+            if (isNaN(pVal)) return;
+            const date = new Date(pt.last_changed); date.setMinutes(0, 0, 0); const key = date.getTime();
+            const b = ensure(key);
+            if (prev !== null) { const d = pVal - prev; if (d > 0) b.sum += d; }
+            b.count++;
+            prev = pVal;
+        });
+        return Object.keys(buckets).sort().map(timestamp => { const t = parseInt(timestamp); return { x: t, y: buckets[timestamp].sum }; });
+    }
     historyData.forEach(pt => {
         const pVal = parseState(pt.state);
         if (isNaN(pVal)) return;
         const date = new Date(pt.last_changed); date.setMinutes(0, 0, 0); const key = date.getTime();
-        if (!buckets[key]) buckets[key] = { sum: 0, count: 0 };
-        buckets[key].sum += pVal; buckets[key].count++;
+        const b = ensure(key);
+        b.sum += pVal; b.count++;
     });
     return Object.keys(buckets).sort().map(timestamp => { const t = parseInt(timestamp); return { x: t, y: buckets[timestamp].sum / buckets[timestamp].count }; });
 }
 
-function processData(history, type, unit, startTime = null) {
+function processData(history, type, unit, startTime = null, cumulative = null) {
     // 1. Deduplicate History (Fix for double tooltip values)
     const uniqueHistory = [];
     const seenTimes = new Set();
@@ -392,7 +492,7 @@ function processData(history, type, unit, startTime = null) {
     });
     history = uniqueHistory;
 
-    const isEnergy = unit && (unit.includes("Wh") || unit.includes("kWh"));
+    const isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
     let dataPoints = [];
 
     if (history.length > 1) {
@@ -407,7 +507,7 @@ function processData(history, type, unit, startTime = null) {
 
     if (dataPoints.length === 0) {
         if (type === 'bar') {
-            dataPoints = aggregateToHourly(history);
+            dataPoints = aggregateToHourly(history, isEnergy);
         } else if (history.length > 2000) {
             const step = Math.ceil(history.length / 2000);
             dataPoints = history.filter((_, i) => i % step === 0 && !isNaN(parseState(_.state)))
@@ -638,6 +738,8 @@ function getPanelTemplate() {
         .s-id { font-size: 11px; color: var(--secondary-text-color); margin-top: 2px; }
         .add-sensor-row { display: flex; gap: 8px; align-items: center; }
         .color-picker { width: 44px; height: 44px; padding: 2px; border-radius: 4px; border: 1px solid var(--divider-color); background: var(--primary-background-color); cursor: pointer; }
+        .btn-add-small { width:100%; padding:6px; background:transparent; border:1px dashed var(--primary-color); color:var(--primary-color); font-size:11px; font-weight:bold; text-transform:uppercase; cursor:pointer; border-radius:4px; }
+        .btn-add-small:hover { background:rgba(var(--rgb-primary-color,0,115,207),0.1); }
         .btn-icon { width: 44px; height: 44px; background: var(--btn-color); color: white; border: none; border-radius: 4px; font-size: 20px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
         .btn-icon:hover { background-color: #757575; }
         .btn-icon.grey { background-color: #757575; }
@@ -893,6 +995,7 @@ function getPanelTemplate() {
           <div class="control-group add-sensor-row">
              <input type="color" id="color-input" class="color-picker" value="#03a9f4" title="${t('selectColor')}">
              <button id="clear-all-btn" class="btn-icon grey" title="${t('deleteList')}"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg></button>
+             <button id="reroll-colors-btn" class="btn-icon" title="${t('rerollColors')}" style="background-color:#6a4c93;font-size:16px;width:auto;padding:0 8px;">🎨</button>
              <button id="add-card-btn" class="btn-icon" title="${t('addCustomCard')}" style="font-size:12px;width:auto;padding:0 8px;">${t('addCard')}</button>
              
              <div style="margin-left:auto; display:flex; gap:5px;">
@@ -932,18 +1035,24 @@ function getPanelTemplate() {
 				<select id="chart-type">
 					<option value="line" selected>${t('line')}</option>
 					<option value="bar">${t('bar')}</option>
+					<option value="stackedArea">${t('stackedArea')}</option>
 					<option value="doughnut">${t('doughnut')}</option>
 					<option value="stepped">${t('stepped')}</option>
 					<option value="scatter">${t('scatter')}</option>
 				</select>
 			  </div>
               <div class="control-group" style="margin-top:10px;">
-                 <label>${t('threshold1')}</label>
-                 <input id="threshold-input" type="number" step="any" placeholder="z.B. 500" title="Zeigt eine rote Linie bei diesem Wert an">
+                 <label>${t('refLinesSection')}</label>
+                 <div id="ref-lines-list"></div>
+                 <button id="add-ref-line-btn" class="btn-add-small" style="margin-top:6px;">${t('addRefLineBtn')}</button>
               </div>
               <div class="control-group" style="margin-top:10px;">
-                 <label>${t('threshold2')}</label>
-                 <input id="threshold2-input" type="number" step="any" placeholder="z.B. 1000" title="Zeigt eine hellblaue Linie bei diesem Wert an">
+                 <label>${t('yMinLabel')}</label>
+                 <input id="y-min-input" type="number" step="any" placeholder="${t('autoPlaceholder')}" title="${t('yMinTitle')}">
+              </div>
+              <div class="control-group" style="margin-top:10px;">
+                 <label>${t('yMaxLabel')}</label>
+                 <input id="y-max-input" type="number" step="any" placeholder="${t('autoPlaceholder')}" title="${t('yMaxTitle')}">
               </div>
               <div class="toggle-row" id="toggle-autoscale-row" style="margin-top: 10px;">
                  <span class="toggle-label">${t('autoScale')}</span>
@@ -961,6 +1070,22 @@ function getPanelTemplate() {
               <div class="toggle-row" id="toggle-grid-row" style="margin-top: 10px;">
                  <span class="toggle-label">${t('hideGrid')}</span>
                  <input type="checkbox" class="toggle-switch" id="hide-grid-switch">
+              </div>
+              <div class="toggle-row" id="toggle-legend-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('hideLegend')}</span>
+                 <input type="checkbox" class="toggle-switch" id="hide-legend-switch">
+              </div>
+              <div class="toggle-row" id="toggle-peaks-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showPeaks')}</span>
+                 <input type="checkbox" class="toggle-switch" id="peaks-switch">
+              </div>
+              <div class="toggle-row" id="toggle-nowline-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showNowLine')}</span>
+                 <input type="checkbox" class="toggle-switch" id="nowline-switch">
+              </div>
+              <div class="toggle-row" id="toggle-daynight-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showDayNight')}</span>
+                 <input type="checkbox" class="toggle-switch" id="daynight-switch">
               </div>
               <div class="toggle-row" id="toggle-stacked-row" style="margin-top: 10px; display:none;"><span class="toggle-label">${t('stackedBars')}</span><input type="checkbox" class="toggle-switch" id="stacked-switch"></div>
 		  </div>
@@ -989,6 +1114,13 @@ function getPanelTemplate() {
 				 <div><label>${t('to')}</label><input type="datetime-local" id="date-end"></div>
 			  </div>
 			  <button id="reset-zoom-btn">${t('resetZoom')}</button>
+			  <div class="control-group" style="margin-top:15px;">
+				 <label>${t('dateFormat')}</label>
+				 <select id="date-format-select">
+					<option value="dmy">${t('dateFormatDMY')}</option>
+					<option value="mdy">${t('dateFormatMDY')}</option>
+				 </select>
+			  </div>
 		  </div>	  
           <div class="saved-views-section"><label>${t('savedViews')}</label><div id="saved-views-container"></div></div>
           <div class="error-msg" id="error-msg"></div>
@@ -1196,7 +1328,7 @@ requireChartjsPluginZoom_min();
 
 /* detailed-charts-panel-logic.js */
 console.log(
-    "%c📉 DetailedChartsPanelLogic: v_2.6 ready",
+    "%c📉 DetailedChartsPanelLogic: v_2.7 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -1230,13 +1362,41 @@ class DetailedChartsLogic extends HTMLElement {
         this.zoomLevel = 1.0;
         this.monochromeMode = false;
         this.sidebarCollapsed = false;
-        this.thresholdValue = "";
-        this.thresholdValue2 = "";
+        this.thresholds = [];
         this.autoScale = false;
         this.chartTension = 4;
 
         this.hideAxislabels = false;
         this.hideGrid = false;
+        this.hideLegend = false;
+        this.hideMonoBtn = false;
+        this.dateFormat = 'dmy';
+        this.showPeaks = false;
+        this.showNowLine = false;
+        this.showDayNight = false;
+    }
+
+    _isCumulative(entityId, unit) {
+        const sc = this._hass?.states?.[entityId]?.attributes?.state_class;
+        return isCumulativeSensor(unit, sc);
+    }
+
+    _precisionFor(entityId) {
+        // Resolve the configured display precision: entity registry first (UI setting),
+        // then state attributes, then the integration's suggestion; fall back to 2.
+        if (!entityId) return 2;
+        const reg = this._hass?.entities?.[entityId];
+        if (reg) {
+            if (reg.display_precision !== undefined && reg.display_precision !== null) return reg.display_precision;
+            const op = reg.options?.sensor?.display_precision;
+            if (op !== undefined && op !== null) return op;
+        }
+        const attrs = this._hass?.states?.[entityId]?.attributes;
+        if (attrs) {
+            if (attrs.display_precision !== undefined && attrs.display_precision !== null) return attrs.display_precision;
+            if (attrs.suggested_display_precision !== undefined && attrs.suggested_display_precision !== null) return attrs.suggested_display_precision;
+        }
+        return 2;
     }
 
     // ... (existing imports)
@@ -1359,7 +1519,7 @@ class DetailedChartsLogic extends HTMLElement {
                         let type = ds.type || chart.config.type;
                         if (type === 'stepped') type = 'line';
 
-                        let points = processData(newResults[sensorIdx], type, unit, startTime);
+                        let points = processData(newResults[sensorIdx], type, unit, startTime, this._isCumulative(conf.entityId, unit));
 
                         if (this.autoScale) {
                             if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -1384,7 +1544,7 @@ class DetailedChartsLogic extends HTMLElement {
             let displayVal = curr.toFixed(precision);
 
             let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (endTime - startTime) / 3600000;
                 const isAggregated = (type === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -1396,25 +1556,25 @@ class DetailedChartsLogic extends HTMLElement {
         // Update Split Cards (Footer)
         this.selectedSensors.forEach((s, idx) => {
             if (s.isCard) return;
-            // Suche Footer im ShadowRoot (funktioniert für Mixed & Split Layout)
-            // Hinweis: Im Mixed Mode sind die Split-Indizes oft verschoben oder separat, 
-            // aber renderSplitView nutzt dataset-index.
             const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${idx}"]`);
             if (card) {
                 const footer = card.querySelector('.split-stats-box');
                 if (footer) {
+                    if (!this.showStats) { footer.style.display = 'none'; return; }
+                    footer.style.display = '';
                     const sensorIdx = realSensors.findIndex(rs => rs.entityId === s.entityId);
                     if (sensorIdx >= 0 && newResults[sensorIdx]) {
                         const unit = this._hass.states[s.entityId]?.attributes?.unit_of_measurement || '';
                         let type = s.typeOverride || this.content.querySelector('#chart-type').value;
+                        if (type === 'stackedArea') type = 'line';
                         if (this.stackedBars) type = 'bar';
 
-                        let points = processData(newResults[sensorIdx], type, unit, startTime);
+                        let points = processData(newResults[sensorIdx], type, unit, startTime, this._isCumulative(s.entityId, unit));
                         if (this.autoScale) {
                             if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                             if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                         }
-                        const precision = this._hass.states[s.entityId]?.attributes?.display_precision ?? 2;
+                        const precision = this._precisionFor(s.entityId);
                         const stats = calcStats(points, unit, type, precision);
                         footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max);
                     }
@@ -1430,18 +1590,107 @@ class DetailedChartsLogic extends HTMLElement {
                 if (s.hidden) return;
                 const unit = this._hass.states[s.entityId]?.attributes?.unit_of_measurement || '';
                 let type = this.content.querySelector('#chart-type').value;
+                if (type === 'stackedArea') type = 'line';
                 if (this.stackedBars) type = 'bar';
 
-                let points = processData(newResults[idx], type, unit, startTime);
+                let points = processData(newResults[idx], type, unit, startTime, this._isCumulative(s.entityId, unit));
                 if (this.autoScale) {
                     if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                     if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                 }
-                const precision = this._hass.states[s.entityId]?.attributes?.display_precision ?? 2;
+                const precision = this._precisionFor(s.entityId);
                 const stats = calcStats(points, unit, type, precision);
                 html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label);
             });
             statsWrapper.innerHTML = html;
+        }
+    }
+
+    _updateVisibleStats(chart, sensorIndex) {
+        if (!this.showStats) return;
+        const xMin = chart.scales.x.min;
+        const xMax = chart.scales.x.max;
+
+        if (sensorIndex !== null && sensorIndex !== undefined) {
+            const conf = this.selectedSensors[sensorIndex];
+            if (!conf || conf.isCard) return;
+            const dataset = chart.data.datasets.find(d => d._entityId === conf.entityId);
+            if (!dataset) return;
+
+            const visiblePoints = dataset.data.filter(p => p.x >= xMin && p.x <= xMax);
+            if (!visiblePoints.length) return;
+
+            let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
+            if (this.autoScale) {
+                if (unit === 'W') unit = 'kW';
+                else if (unit === 'Wh') unit = 'kWh';
+            }
+            const precision = this._precisionFor(conf.entityId);
+            const values = visiblePoints.map(p => p.y);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const curr = values[values.length - 1];
+
+            let displayVal = curr.toFixed(precision);
+            let displayLabel = t('current');
+            if (this._isCumulative(conf.entityId, unit)) {
+                const hours = (xMax - xMin) / 3600000;
+                let type = conf.typeOverride || this.content.querySelector('#chart-type').value;
+                if (type === 'stackedArea') type = 'line';
+                if (this.stackedBars) type = 'bar';
+                const isAggregated = (type === 'bar' && hours > 24);
+                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
+                displayLabel = t('sum');
+            }
+
+            const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${sensorIndex}"]`);
+            if (card) {
+                const footer = card.querySelector('.split-stats-box');
+                if (footer) {
+                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision));
+                }
+            }
+        } else {
+            const statsWrapper = this.shadowRoot.querySelector('#stats-wrapper') || this.shadowRoot.querySelector('#stats-wrapper-top');
+            if (!statsWrapper || statsWrapper.style.display === 'none') return;
+
+            let html = '';
+            chart.data.datasets.forEach(ds => {
+                if (!ds._entityId) return;
+                if (ds.hidden) return;
+                const conf = this.selectedSensors.find(s => s.entityId === ds._entityId);
+                if (!conf || conf.hidden) return;
+
+                const visiblePoints = ds.data.filter(p => p.x >= xMin && p.x <= xMax);
+                if (!visiblePoints.length) return;
+
+                let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
+                if (this.autoScale) {
+                    if (unit === 'W') unit = 'kW';
+                    else if (unit === 'Wh') unit = 'kWh';
+                }
+                const precision = this._precisionFor(conf.entityId);
+                const values = visiblePoints.map(p => p.y);
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                const curr = values[values.length - 1];
+
+                let displayVal = curr.toFixed(precision);
+                let displayLabel = t('current');
+                if (this._isCumulative(conf.entityId, unit)) {
+                    const hours = (xMax - xMin) / 3600000;
+                    let type = this.content.querySelector('#chart-type').value;
+                    if (type === 'stackedArea') type = 'line';
+                    if (this.stackedBars) type = 'bar';
+                    const isAggregated = (type === 'bar' && hours > 24);
+                    displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
+                    displayLabel = t('sum');
+                }
+                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel);
+            });
+            if (html) statsWrapper.innerHTML = html;
         }
     }
 
@@ -1481,9 +1730,10 @@ class DetailedChartsLogic extends HTMLElement {
             if (chart) {
                 const unit = this._hass.states[sensorConfig.entityId]?.attributes?.unit_of_measurement || '';
                 let currentType = sensorConfig.typeOverride || this.content.querySelector('#chart-type').value;
+                if (currentType === 'stackedArea') currentType = 'line';
                 if (this.stackedBars) currentType = 'bar';
 
-                let points = processData(newData, currentType, unit, startTime);
+                let points = processData(newData, currentType, unit, startTime, this._isCumulative(sensorConfig.entityId, unit));
 
                 // AutoScale logic locally applied
                 if (this.autoScale) {
@@ -1513,7 +1763,7 @@ class DetailedChartsLogic extends HTMLElement {
 
                     // Process
                     const shiftTime = 365 * 24 * 60 * 60 * 1000;
-                    const rawPrevPoints = processData(prevData, currentType, unit, new Date(startTime.getTime() - shiftTime));
+                    const rawPrevPoints = processData(prevData, currentType, unit, new Date(startTime.getTime() - shiftTime), this._isCumulative(sensorConfig.entityId, unit));
                     prevPoints = rawPrevPoints.map(p => ({ x: p.x + shiftTime, y: p.y }));
 
                     if (this.autoScale) {
@@ -1542,12 +1792,12 @@ class DetailedChartsLogic extends HTMLElement {
                 const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${index}"]`);
                 if (card) {
                     const footer = card.querySelector(`#footer-${index} .split-stats-box`);
-                    if (footer) {
-                        const precision = this._hass.states[sensorConfig.entityId]?.attributes?.display_precision ?? 2;
+                    if (footer && this.showStats) {
+                        const precision = this._precisionFor(sensorConfig.entityId);
                         let displayVal = curr.toFixed(precision);
 
                         let displayLabel = t('current');
-                        if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+                        if (this._isCumulative(sensorConfig.entityId, unit)) {
                             const hours = (endTime - startTime) / 3600000;
                             const isAggregated = (currentType === 'bar' && hours > 24);
                             displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -1700,9 +1950,9 @@ class DetailedChartsLogic extends HTMLElement {
             const isPercent = unit === '%' || cleanName(conf.entityId).toLowerCase().includes('soc');
             if (isPercent) return;
 
-            const points = processData(obj.data, 'bar', unit, st);
+            const points = processData(obj.data, 'bar', unit, st, this._isCumulative(conf.entityId, unit));
             const valArray = points.map(p => p.y);
-            const isEnergy = unit && (unit.includes("Wh") || unit.includes("kWh"));
+            const isEnergy = this._isCumulative(conf.entityId, unit);
             let sensorSum = 0;
             if (isEnergy) { sensorSum = calculateEnergySum(valArray, isDailyAgg); } else { sensorSum = valArray.reduce((a, b) => a + b, 0); }
             if (sensorSum > 0) {
@@ -1791,8 +2041,12 @@ class DetailedChartsLogic extends HTMLElement {
 
         const monoBtn = wrapper.querySelector('#toggle-mono-btn');
         if (monoBtn) {
-            monoBtn.addEventListener('click', () => this.toggleMonochrome());
-            if (!this.monochromeMode) monoBtn.classList.add('active');
+            if (this.hideMonoBtn) {
+                monoBtn.style.display = 'none';
+            } else {
+                monoBtn.addEventListener('click', () => this.toggleMonochrome());
+                if (!this.monochromeMode) monoBtn.classList.add('active');
+            }
         }
 
         if (chartType === 'doughnut') { this.renderDoughnut(cacheData, ctx, statsWrapper); return; }
@@ -1801,6 +2055,10 @@ class DetailedChartsLogic extends HTMLElement {
         let allStatsHTML = '';
         const st = this._globalStartTime || cacheData[0]?.startTime || new Date();
         const et = this._globalEndTime || cacheData[0]?.endTime || new Date();
+
+        const isStackedArea = (chartType === 'stackedArea');
+        let stackOrdinal = 0;
+        const stackMemberDatasets = [];
 
         let hasSecondaryAxis = false;
         let cacheIdx = 0;
@@ -1817,13 +2075,13 @@ class DetailedChartsLogic extends HTMLElement {
             const useRightAxis = (unit === '%' || cleanName(conf.entityId).toLowerCase().includes('soc'));
             if (useRightAxis) hasSecondaryAxis = true;
 
-            let effectiveType = this.stackedBars ? 'bar' : chartType;
+            let effectiveType = this.stackedBars ? 'bar' : (isStackedArea ? 'line' : chartType);
             if (useRightAxis || isBinary) effectiveType = 'line';
 
             let isStepped = false;
             if (effectiveType === 'stepped' || isBinary) { effectiveType = 'line'; isStepped = true; }
 
-            let points = processData(sensorDataObj.data, effectiveType, unit, st);
+            let points = processData(sensorDataObj.data, effectiveType, unit, st, this._isCumulative(conf.entityId, unit));
             if (!points.length) return;
 
             if (this.autoScale) {
@@ -1831,13 +2089,13 @@ class DetailedChartsLogic extends HTMLElement {
                 else if (unit === 'Wh') { points = points.map(p => ({ x: p.x, y: p.y / 1000 })); unit = 'kWh'; }
             }
 
-            const precision = this._hass.states[conf.entityId]?.attributes?.display_precision ?? 2;
+            const precision = this._precisionFor(conf.entityId);
             const values = points.map(p => p.y);
             const min = Math.min(...values); const max = Math.max(...values);
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (et - st) / 3600000;
                 const isAggregated = (effectiveType === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -1845,9 +2103,13 @@ class DetailedChartsLogic extends HTMLElement {
             }
             allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel);
 
+            const isStackMember = isStackedArea && !isBinary && !useRightAxis;
+
             let dsBgColor = conf.color;
             if (isBinary) {
                 dsBgColor = hexToRgba(conf.color, 0.2);
+            } else if (isStackMember) {
+                dsBgColor = hexToRgba(conf.color, 0.55);
             } else if (this.fillArea && effectiveType === 'line') {
                 const grad = ctx.createLinearGradient(0, 0, 0, 400);
                 grad.addColorStop(0, hexToRgba(conf.color, 0.5));
@@ -1855,16 +2117,24 @@ class DetailedChartsLogic extends HTMLElement {
                 dsBgColor = grad;
             }
 
+            let fillValue;
+            if (isStackMember) {
+                fillValue = (stackOrdinal === 0) ? 'origin' : '-1';
+                stackOrdinal++;
+            } else {
+                fillValue = (isBinary) ? true : (this.fillArea && !this.monochromeMode);
+            }
+
             const isHidden = conf.hidden === true;
             // --- UPDATED: Use alias and store entityId ---
-            datasets.push({
+            const ds = {
                 label: conf.alias || cleanName(conf.entityId),
                 _entityId: conf.entityId, // Store original ID for lookups
                 hidden: isHidden,
                 data: points,
                 borderColor: conf.color,
                 backgroundColor: dsBgColor,
-                fill: (isBinary) ? true : (this.fillArea && !this.monochromeMode),
+                fill: fillValue,
                 borderWidth: (isBinary) ? 1 : (effectiveType === 'bar' ? 0 : 2.5),
                 categoryPercentage: 0.98,
                 barPercentage: 0.98,
@@ -1877,36 +2147,59 @@ class DetailedChartsLogic extends HTMLElement {
                 yAxisID: isBinary ? 'y_binary' : (useRightAxis ? 'y1' : 'y'),
                 type: effectiveType,
                 order: isBinary ? 10 : 0,
-                spanGaps: true
+                spanGaps: true,
+                stack: isStackMember ? 'stackArea' : undefined
+            };
+            datasets.push(ds);
+            if (isStackMember) stackMemberDatasets.push(ds);
+        });
+
+        if (isStackedArea && stackMemberDatasets.length >= 2) {
+            const allX = new Set();
+            stackMemberDatasets.forEach(d => d.data.forEach(p => allX.add(p.x)));
+            let xs = Array.from(allX).sort((a, b) => a - b);
+            const MAX_TICKS = 1500;
+            if (xs.length > MAX_TICKS) {
+                const step = Math.ceil(xs.length / MAX_TICKS);
+                xs = xs.filter((_, i) => i % step === 0);
+            }
+            stackMemberDatasets.forEach(d => {
+                const src = d.data;
+                const resampled = new Array(xs.length);
+                let i = 0;
+                let last = 0;
+                let started = false;
+                for (let k = 0; k < xs.length; k++) {
+                    const x = xs[k];
+                    while (i < src.length && src[i].x <= x) {
+                        last = src[i].y;
+                        started = true;
+                        i++;
+                    }
+                    resampled[k] = { x, y: started ? last : 0 };
+                }
+                d.data = resampled;
+            });
+        }
+
+        (this.thresholds || []).forEach((ref, i) => {
+            if (ref.value === undefined || ref.value === '') return;
+            const val = parseFloat(ref.value);
+            if (isNaN(val)) return;
+            datasets.push({
+                label: ref.alias || `Limit${i + 1}`,
+                data: [{ x: st.getTime(), y: val }, { x: et.getTime(), y: val }],
+                borderColor: ref.color || '#f44336', borderWidth: 1.5, borderDash: [10, 5],
+                pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1,
+                _isThreshold: true
             });
         });
 
-        if (this.thresholdValue !== null && this.thresholdValue !== '') {
-            const val = parseFloat(this.thresholdValue);
-            if (!isNaN(val)) {
-                datasets.push({
-                    label: 'Limit',
-                    data: [{ x: st.getTime(), y: val }, { x: et.getTime(), y: val }],
-                    borderColor: '#f44336', borderWidth: 1.5, borderDash: [10, 5],
-                    pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1
-                });
-            }
-        }
-        if (this.thresholdValue2 !== null && this.thresholdValue2 !== '') {
-            const val2 = parseFloat(this.thresholdValue2);
-            if (!isNaN(val2)) {
-                datasets.push({
-                    label: 'Limit2',
-                    data: [{ x: st.getTime(), y: val2 }, { x: et.getTime(), y: val2 }],
-                    borderColor: '#03a9f4', borderWidth: 1.5, borderDash: [10, 5],
-                    pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1
-                });
-            }
-        }
-
         if (statsWrapper) statsWrapper.innerHTML = allStatsHTML;
-        const finalChartType = (this.stackedBars ? 'bar' : (chartType === 'stepped' ? 'line' : chartType));
-        this.createChartInstance(ctx, finalChartType, datasets, st, et, true, null, false, hasSecondaryAxis);
+        const finalChartType = this.stackedBars
+            ? 'bar'
+            : (isStackedArea || chartType === 'stepped' ? 'line' : chartType);
+        this.createChartInstance(ctx, finalChartType, datasets, st, et, true, null, this.hideLegend, hasSecondaryAxis, false, isStackedArea);
 
         if (this.showDonutSidebar && chartType !== 'doughnut') {
             const donutCanvas = wrapper.querySelector('#canvas-side-donut');
@@ -1990,6 +2283,7 @@ class DetailedChartsLogic extends HTMLElement {
             card.addEventListener('drop', (e) => { e.preventDefault(); const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); if (fromIndex !== idx) { this.reorderSensors(fromIndex, idx); } });
 
             let currentType = conf.typeOverride || globalChartType;
+            if (currentType === 'stackedArea') currentType = 'line';
             let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
             const isBinary = conf.entityId.startsWith('binary_sensor.') || (this._hass.states[conf.entityId]?.attributes?.device_class === 'binary_sensor');
             if (isBinary) currentType = 'line';
@@ -1997,7 +2291,7 @@ class DetailedChartsLogic extends HTMLElement {
             let isStepped = false;
             if (currentType === 'stepped' || isBinary) { currentType = 'line'; isStepped = true; }
 
-            let points = processData(sensorDataObj.data, currentType, unit, chartSt);
+            let points = processData(sensorDataObj.data, currentType, unit, chartSt, this._isCumulative(conf.entityId, unit));
 
             // Previous Year Logic (Visuals)
             let prevPoints = [];
@@ -2006,7 +2300,7 @@ class DetailedChartsLogic extends HTMLElement {
                 // NOTE: This simple shift might not account for leap years perfectly, but is usually sufficient for visuals.
                 const shiftTime = 365 * 24 * 60 * 60 * 1000;
                 // Process raw prev data first
-                const rawPrevPoints = processData(sensorDataObj.prevData, currentType, unit, new Date(chartSt.getTime() - shiftTime));
+                const rawPrevPoints = processData(sensorDataObj.prevData, currentType, unit, new Date(chartSt.getTime() - shiftTime), this._isCumulative(conf.entityId, unit));
 
                 prevPoints = rawPrevPoints.map(p => ({
                     x: p.x + shiftTime,
@@ -2024,20 +2318,26 @@ class DetailedChartsLogic extends HTMLElement {
                 else if (unit === 'Wh') { points = points.map(p => ({ x: p.x, y: p.y / 1000 })); unit = 'kWh'; }
             }
 
-            const precision = this._hass.states[conf.entityId]?.attributes?.display_precision ?? 2;
+            const precision = this._precisionFor(conf.entityId);
             const values = points.map(p => p.y);
             const min = Math.min(...values); const max = Math.max(...values);
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const isAggregated = (currentType === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                 displayLabel = t('sum');
             }
 
             const footer = card.querySelector(`#footer-${idx}`);
-            footer.querySelector('.split-stats-box').innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+            const statsBox = footer.querySelector('.split-stats-box');
+            if (this.showStats) {
+                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+                statsBox.style.display = '';
+            } else {
+                statsBox.style.display = 'none';
+            }
 
             const controlsBox = document.createElement('div');
             controlsBox.className = 'split-controls-box';
@@ -2069,7 +2369,7 @@ class DetailedChartsLogic extends HTMLElement {
                 let prevPoints = [];
                 if (this.compareYear && sensorDataObj.prevData && sensorDataObj.prevData.length > 0) {
                     const shiftTime = 365 * 24 * 60 * 60 * 1000;
-                    const rawPrevPoints = processData(sensorDataObj.prevData, newType, unit, new Date(sensorDataObj.startTime.getTime() - shiftTime));
+                    const rawPrevPoints = processData(sensorDataObj.prevData, newType, unit, new Date(sensorDataObj.startTime.getTime() - shiftTime), this._isCumulative(conf.entityId, unit));
                     prevPoints = rawPrevPoints.map(p => ({ x: p.x + shiftTime, y: p.y }));
                     if (this.autoScale) {
                         if (unit === 'W' || unit === 'kW') prevPoints = prevPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -2077,7 +2377,7 @@ class DetailedChartsLogic extends HTMLElement {
                     }
                 }
 
-                let newPoints = processData(sensorDataObj.data, newType, unit, sensorDataObj.startTime);
+                let newPoints = processData(sensorDataObj.data, newType, unit, sensorDataObj.startTime, this._isCumulative(conf.entityId, unit));
                 if (this.autoScale) {
                     if (unit === 'W' || unit === 'kW') newPoints = newPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
                     if (unit === 'Wh' || unit === 'kWh') newPoints = newPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -2233,12 +2533,13 @@ class DetailedChartsLogic extends HTMLElement {
         });
     }
 
-    createChartInstance(ctx, type, datasets, startTime, endTime, showZoomBtn, sensorIndex, hideLegend, hasSecondaryAxis, forceNoStack = false) {
+    createChartInstance(ctx, type, datasets, startTime, endTime, showZoomBtn, sensorIndex, hideLegend, hasSecondaryAxis, forceNoStack = false, forceStack = false) {
         const styles = getComputedStyle(this);
         const textColor = styles.getPropertyValue('--primary-text-color').trim();
         const gridColor = styles.getPropertyValue('--divider-color').trim();
         const secondaryText = styles.getPropertyValue('--secondary-text-color').trim();
         const resetBtn = this.content.querySelector('#reset-zoom-btn');
+        const self = this;
 
         if (window.Chart && !window.Chart.Tooltip.positioners.smartCorner) {
             window.Chart.Tooltip.positioners.smartCorner = function (elements, eventPosition) {
@@ -2327,10 +2628,107 @@ class DetailedChartsLogic extends HTMLElement {
             }
         };
 
+        const peakMarkerPlugin = {
+            id: 'peakMarkers',
+            afterDatasetsDraw: (chart) => {
+                if (!self.showPeaks) return;
+                const ctx = chart.ctx;
+                chart.data.datasets.forEach((ds, i) => {
+                    if (!ds._entityId) return;
+                    if (ds.type === 'bar') return;
+                    if (!chart.isDatasetVisible(i)) return;
+                    const meta = chart.getDatasetMeta(i);
+                    if (!meta || !meta.data || !meta.data.length) return;
+                    const pts = ds.data;
+                    if (!pts || pts.length < 2) return;
+                    let iMin = 0, iMax = 0;
+                    for (let k = 1; k < pts.length; k++) {
+                        if (pts[k].y < pts[iMin].y) iMin = k;
+                        if (pts[k].y > pts[iMax].y) iMax = k;
+                    }
+                    const iLast = pts.length - 1;
+                    const state = self._hass?.states?.[ds._entityId];
+                    let unit = state?.attributes?.unit_of_measurement || '';
+                    if (self.autoScale) { if (unit === 'W') unit = 'kW'; else if (unit === 'Wh') unit = 'kWh'; }
+                    const precision = self._precisionFor(ds._entityId);
+                    const color = (typeof ds.borderColor === 'string') ? ds.borderColor : '#888';
+                    const drawMarker = (idx, tag, isMin) => {
+                        const el = meta.data[idx];
+                        if (!el) return;
+                        const x = el.x, y = el.y;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+                        ctx.fillStyle = color; ctx.fill();
+                        ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+                        const label = `${tag} ${Number(pts[idx].y).toFixed(precision)}${unit ? ' ' + unit : ''}`;
+                        ctx.font = 'bold 10px Roboto, sans-serif';
+                        ctx.textBaseline = 'bottom';
+                        ctx.textAlign = (x > chart.chartArea.right - 60) ? 'right' : 'left';
+                        const tx = ctx.textAlign === 'right' ? x - 6 : x + 6;
+                        const ty = isMin ? y + 14 : y - 5;
+                        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(label, tx, ty);
+                        ctx.fillStyle = color; ctx.fillText(label, tx, ty);
+                        ctx.restore();
+                    };
+                    drawMarker(iMax, t('peakMax'), false);
+                    drawMarker(iMin, t('peakMin'), true);
+                    drawMarker(iLast, t('peakLast'), false);
+                });
+            }
+        };
+
+        const nowLineDayNightPlugin = {
+            id: 'nowLineDayNight',
+            beforeDatasetsDraw: (chart) => {
+                if (!self.showDayNight) return;
+                const xScale = chart.scales.x;
+                if (!xScale) return;
+                const min = xScale.min, max = xScale.max;
+                const rangeH = (max - min) / 3600000;
+                if (rangeH > 24 * 21 || rangeH < 1) return;
+                const c = chart.ctx;
+                const { top, bottom } = chart.chartArea;
+                c.save();
+                c.fillStyle = 'rgba(120, 130, 170, 0.10)';
+                const d0 = new Date(min); d0.setHours(0, 0, 0, 0);
+                for (let day = d0.getTime() - 86400000; day <= max + 86400000; day += 86400000) {
+                    const nightStart = day + 20 * 3600000;
+                    const nightEnd = day + 30 * 3600000;
+                    const a = Math.max(nightStart, min);
+                    const b = Math.min(nightEnd, max);
+                    if (b <= a) continue;
+                    const xa = xScale.getPixelForValue(a);
+                    const xb = xScale.getPixelForValue(b);
+                    c.fillRect(xa, top, xb - xa, bottom - top);
+                }
+                c.restore();
+            },
+            afterDatasetsDraw: (chart) => {
+                if (!self.showNowLine) return;
+                const xScale = chart.scales.x;
+                if (!xScale) return;
+                const now = Date.now();
+                if (now < xScale.min || now > xScale.max) return;
+                const x = xScale.getPixelForValue(now);
+                const { top, bottom } = chart.chartArea;
+                const c = chart.ctx;
+                c.save();
+                c.beginPath(); c.moveTo(x, top); c.lineTo(x, bottom);
+                c.lineWidth = 1.5; c.strokeStyle = 'rgba(244, 67, 54, 0.85)';
+                c.setLineDash([4, 4]); c.stroke(); c.setLineDash([]);
+                c.fillStyle = 'rgba(244, 67, 54, 0.95)';
+                c.font = 'bold 10px Roboto, sans-serif';
+                c.textAlign = (x > chart.chartArea.right - 40) ? 'right' : 'left';
+                c.fillText(t('nowLabel'), c.textAlign === 'right' ? x - 4 : x + 4, top + 10);
+                c.restore();
+            }
+        };
+
         const chart = new window.Chart(ctx, {
             type: type === 'stepped' ? 'line' : type,
             data: { datasets },
-            plugins: [verticalHoverLine, drawValuesPlugin],
+            plugins: [verticalHoverLine, drawValuesPlugin, peakMarkerPlugin, nowLineDayNightPlugin],
             options: {
                 responsive: true, maintainAspectRatio: false,
                 animation: { duration: 0 }, hover: { animationDuration: 0 },
@@ -2353,7 +2751,7 @@ class DetailedChartsLogic extends HTMLElement {
                         },
                         backgroundColor: 'rgba(20, 20, 20, 0.95)', titleColor: '#fff', bodyColor: '#bbb', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 12,
                         callbacks: {
-                            title: (c) => new Date(c[0].parsed.x).toLocaleString('de-DE'),
+                            title: (c) => new Date(c[0].parsed.x).toLocaleString(this.dateFormat === 'mdy' ? 'en-US' : 'de-DE'),
                             label: (c) => {
                                 const ds = c.dataset;
                                 const lbl = ds.label || '';
@@ -2365,9 +2763,7 @@ class DetailedChartsLogic extends HTMLElement {
                                 if (ds._entityId) {
                                     const state = this._hass.states[ds._entityId];
                                     unit = state?.attributes?.unit_of_measurement || '';
-                                    if (state?.attributes?.display_precision !== undefined && state?.attributes?.display_precision !== null) {
-                                        precision = state.attributes.display_precision;
-                                    }
+                                    precision = this._precisionFor(ds._entityId);
                                     if (ds._entityId.startsWith('binary_sensor.') || state?.attributes?.device_class === 'binary_sensor') isBinary = true;
                                 } else {
                                     // Fallback search (match label or entity name)
@@ -2375,9 +2771,7 @@ class DetailedChartsLogic extends HTMLElement {
                                     if (s) {
                                         const state = this._hass.states[s.entityId];
                                         unit = state?.attributes?.unit_of_measurement || '';
-                                        if (state?.attributes?.display_precision !== undefined && state?.attributes?.display_precision !== null) {
-                                            precision = state.attributes.display_precision;
-                                        }
+                                        precision = this._precisionFor(s.entityId);
                                         if (s.entityId.startsWith('binary_sensor.') || state?.attributes?.device_class === 'binary_sensor') isBinary = true;
                                     }
                                 }
@@ -2417,20 +2811,22 @@ class DetailedChartsLogic extends HTMLElement {
                             onPanComplete: ({ chart }) => {
                                 const min = chart.scales.x.min; const max = chart.scales.x.max; chart.stop();
                                 if (this.layoutMode !== 'combined' && sensorIndex !== null) { this.loadSingleSensorHistory(sensorIndex, new Date(min), new Date(max)); }
-                                else { if (min < startTime.getTime() || max > endTime.getTime()) { this.loadSpecificRange(new Date(min), new Date(max)); } }
+                                else { if (min < startTime.getTime() || max > endTime.getTime()) { this.loadSpecificRange(new Date(min), new Date(max)); } else { this._updateVisibleStats(chart, sensorIndex); } }
                             }
                         },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x', onZoom: () => { if (showZoomBtn) resetBtn.style.display = 'block'; } }
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x', onZoom: () => { if (showZoomBtn) resetBtn.style.display = 'block'; }, onZoomComplete: ({ chart }) => { this._updateVisibleStats(chart, sensorIndex); const xMin = chart.scales.x.min; const xMax = chart.scales.x.max; let refUpdated = false; chart.data.datasets.forEach(ds => { if (ds._isThreshold) { if (ds.data.length === 2) { ds.data[0].x = xMin; ds.data[1].x = xMax; refUpdated = true; } } }); if (refUpdated) chart.update('none'); } }
                     }
                 },
                 scales: {
                     x: {
-                        type: 'linear', position: 'bottom', min: startTime.getTime(), max: endTime.getTime(), stacked: forceNoStack ? false : this.stackedBars, offset: false,
-                        ticks: { display: !this.hideAxislabels, color: secondaryText, maxTicksLimit: 8, callback: function (value) { const d = new Date(value); const diffHours = (endTime - startTime) / (1000 * 60 * 60); if (diffHours > 48) return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); } },
+                        type: 'linear', position: 'bottom', min: startTime.getTime(), max: endTime.getTime(), stacked: forceNoStack ? false : (forceStack || this.stackedBars), offset: false,
+                        ticks: { display: !this.hideAxislabels, color: secondaryText, maxTicksLimit: 8, callback: (function (dateFormat) { return function (value) { const d = new Date(value); const scaleMin = (this && typeof this.min === 'number') ? this.min : startTime.getTime(); const scaleMax = (this && typeof this.max === 'number') ? this.max : endTime.getTime(); const rangeMs = scaleMax - scaleMin; const rangeHours = rangeMs / 3600000; const locale = dateFormat === 'mdy' ? 'en-US' : 'de-DE'; if (rangeHours > 24 * 180) { return d.toLocaleDateString(locale, { month: 'short', year: '2-digit' }); } if (rangeHours > 48) { return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }); } if (rangeHours > 6) { return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }); } if (rangeHours > 0.1) { return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }; })(this.dateFormat) },
                         grid: { color: gridColor, drawBorder: false, display: !this.hideGrid }
                     },
                     y: {
-                        type: 'linear', position: 'left', stacked: forceNoStack ? false : this.stackedBars, grace: '15%',
+                        type: 'linear', position: 'left', stacked: forceNoStack ? false : (forceStack || this.stackedBars), grace: '15%',
+                        ...(Number.isFinite(this.yMin) ? { min: this.yMin } : {}),
+                        ...(Number.isFinite(this.yMax) ? { max: this.yMax } : {}),
                         ticks: { display: !this.hideAxislabels, color: secondaryText },
                         grid: { color: gridColor, borderDash: [5, 5], display: !this.hideGrid }
                     },
@@ -2489,7 +2885,7 @@ class DetailedChartsLogic extends HTMLElement {
 
 /* detailed-charts-panel.js */
 console.log(
-    "%c📉️ DetailedChartsPanel: v_2.6 ready",
+    "%c📉️ DetailedChartsPanel: v_2.7 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -2566,12 +2962,19 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.showDonutSidebar = config.showDonutSidebar || false;
         this.zoomLevel = config.zoomLevel || 1.0;
         this.autoScale = config.autoScale || false;
-        this.thresholdValue = config.threshold || "";
-        this.thresholdValue2 = config.threshold2 || "";
+        this.thresholds = this._migrateThresholds(config);
         this.chartTension = config.chartTension !== undefined ? config.chartTension : 4;
+        this.yMin = this._parseAxisLimit(config.yMin);
+        this.yMax = this._parseAxisLimit(config.yMax);
 
         this.hideAxislabels = config.hideAxislabels || false;
         this.hideGrid = config.hideGrid || false;
+        this.hideLegend = config.hideLegend || false;
+        this.hideMonoBtn = config.hideMonoBtn || false;
+        this.dateFormat = config.dateFormat || 'dmy';
+        this.showPeaks = config.showPeaks || false;
+        this.showNowLine = config.showNowLine || false;
+        this.showDayNight = config.showDayNight || false;
 
         if (this.content) {
             const updateInput = (id, val, isCheck = false) => {
@@ -2595,6 +2998,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
             updateInput('#hide-axis-switch', this.hideAxislabels, true);
             updateInput('#hide-grid-switch', this.hideGrid, true);
+            updateInput('#hide-legend-switch', this.hideLegend, true);
+            updateInput('#date-format-select', this.dateFormat);
+            updateInput('#peaks-switch', this.showPeaks, true);
+            updateInput('#nowline-switch', this.showNowLine, true);
+            updateInput('#daynight-switch', this.showDayNight, true);
 
             const gridDisp = this.content.querySelector('#grid-value-display');
             if (gridDisp) gridDisp.textContent = this.gridColumns;
@@ -2611,8 +3019,9 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             updateInput('#donut-switch', this.showDonutSidebar, true);
             updateInput('#autoscale-switch', this.autoScale, true);
             updateInput('#compare-year-switch', this.compareYear, true);
-            updateInput('#threshold-input', this.thresholdValue);
-            updateInput('#threshold2-input', this.thresholdValue2);
+            this.renderRefLinesUI();
+            updateInput('#y-min-input', this.yMin === undefined ? '' : this.yMin);
+            updateInput('#y-max-input', this.yMax === undefined ? '' : this.yMax);
 
             this.updateSliderVisibility();
             this.updateStackedVisibility();
@@ -2622,10 +3031,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
             // FIX: If config changed (Editor), sync to localStorage to prevent loadSettings from reverting it
             if (oldConfig) {
-                const keysToCheck = ['layoutMode', 'chartType', 'timeMode', 'timeSelect', 'fillArea', 'stackedBars', 'gridColumns', 'zoomLevel', 'showStats', 'showDonutSidebar', 'autoScale', 'compareYear', 'threshold', 'threshold2', 'hideAxislabels', 'hideGrid'];
+                const keysToCheck = ['layoutMode', 'chartType', 'timeMode', 'timeSelect', 'fillArea', 'stackedBars', 'gridColumns', 'zoomLevel', 'showStats', 'showDonutSidebar', 'autoScale', 'compareYear', 'hideAxislabels', 'hideGrid', 'hideLegend', 'hideMonoBtn', 'dateFormat', 'yMin', 'yMax', 'showPeaks', 'showNowLine', 'showDayNight'];
                 let hasChanged = keysToCheck.some(k => oldConfig[k] !== config[k]);
                 if (!hasChanged) {
                     if (JSON.stringify(config.sensors) !== JSON.stringify(oldConfig.sensors)) hasChanged = true;
+                    if (JSON.stringify(config.thresholds) !== JSON.stringify(oldConfig.thresholds)) hasChanged = true;
                 }
                 if (hasChanged) {
                     this.saveSettings();
@@ -2653,6 +3063,87 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     getCardSize() {
         return 4;
+    }
+
+    _parseAxisLimit(v) {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+    }
+
+    _migrateThresholds(config) {
+        if (config.thresholds) return config.thresholds;
+        const result = [];
+        if (config.threshold !== undefined && config.threshold !== '') {
+            result.push({ value: config.threshold, alias: config.thresholdAlias1 || '', color: '#f44336' });
+        }
+        if (config.threshold2 !== undefined && config.threshold2 !== '') {
+            result.push({ value: config.threshold2, alias: config.thresholdAlias2 || '', color: '#03a9f4' });
+        }
+        return result;
+    }
+
+    renderRefLinesUI() {
+        const list = this.content.querySelector('#ref-lines-list');
+        if (!list) return;
+        list.innerHTML = '';
+        (this.thresholds || []).forEach((ref, i) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;';
+
+            const colWrap = document.createElement('div');
+            colWrap.style.cssText = `width:28px;height:28px;border-radius:50%;background:${ref.color || '#f44336'};flex-shrink:0;cursor:pointer;overflow:hidden;`;
+            const colInp = document.createElement('input');
+            colInp.type = 'color';
+            colInp.value = ref.color || '#f44336';
+            colInp.style.cssText = 'opacity:0;width:100%;height:100%;cursor:pointer;';
+            colInp.addEventListener('input', (e) => { colWrap.style.background = e.target.value; });
+            colInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], color: e.target.value };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            colWrap.appendChild(colInp);
+            row.appendChild(colWrap);
+
+            const valInp = document.createElement('input');
+            valInp.type = 'number';
+            valInp.step = 'any';
+            valInp.value = ref.value !== undefined ? ref.value : '';
+            valInp.placeholder = t('refLineValue');
+            valInp.style.cssText = 'flex:1;min-width:0;width:auto;';
+            valInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], value: e.target.value };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(valInp);
+
+            const aliasInp = document.createElement('input');
+            aliasInp.type = 'text';
+            aliasInp.value = ref.alias || '';
+            aliasInp.placeholder = t('refLineAlias');
+            aliasInp.style.cssText = 'flex:1;min-width:0;width:auto;';
+            aliasInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], alias: e.target.value.trim() };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(aliasInp);
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--error-color,#f44336);font-size:16px;padding:0 4px;flex-shrink:0;';
+            delBtn.addEventListener('click', () => {
+                this.thresholds = this.thresholds.filter((_, idx) => idx !== i);
+                this.renderRefLinesUI();
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(delBtn);
+
+            list.appendChild(row);
+        });
     }
 
     set hass(hass) {
@@ -2732,6 +3223,8 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         });
 
         this.content.querySelector('#clear-all-btn').addEventListener('click', () => this.clearAllSensors());
+        const rerollBtn = this.content.querySelector('#reroll-colors-btn');
+        if (rerollBtn) rerollBtn.addEventListener('click', () => this.randomizeColors());
         this.content.querySelector('#save-view-btn').addEventListener('click', () => this.saveCurrentView());
 
         this.content.querySelector('#reset-zoom-btn').addEventListener('click', () => this.resetZoomAll());
@@ -2792,7 +3285,8 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             '#fill-switch', '#layout-select', '#stacked-switch',
             '#fill-switch', '#layout-select', '#stacked-switch',
             '#stats-switch', '#donut-switch', '#autoscale-switch', '#compare-year-switch',
-            '#hide-axis-switch', '#hide-grid-switch'
+            '#hide-axis-switch', '#hide-grid-switch', '#hide-legend-switch', '#date-format-select',
+            '#peaks-switch', '#nowline-switch', '#daynight-switch'
         ];
         inputs.forEach(id => {
             const el = this.content.querySelector(id);
@@ -2828,6 +3322,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 }
                 if (id === '#hide-axis-switch') this.hideAxislabels = e.target.checked;
                 if (id === '#hide-grid-switch') this.hideGrid = e.target.checked;
+                if (id === '#hide-legend-switch') this.hideLegend = e.target.checked;
+                if (id === '#date-format-select') this.dateFormat = e.target.value;
+                if (id === '#peaks-switch') this.showPeaks = e.target.checked;
+                if (id === '#nowline-switch') this.showNowLine = e.target.checked;
+                if (id === '#daynight-switch') this.showDayNight = e.target.checked;
 
                 this.updateStackedVisibility();
                 if (!this._config) this.saveSettings();
@@ -2838,17 +3337,30 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             });
         });
 
-        const threshInput = this.content.querySelector('#threshold-input');
-        threshInput.addEventListener('change', (e) => {
-            this.thresholdValue = e.target.value;
-            if (!this._config) this.saveSettings();
-            if (this._sensorDataCache.length > 0) this.updateChartFromCache();
-        });
+        const addRefBtn = this.content.querySelector('#add-ref-line-btn');
+        if (addRefBtn) {
+            addRefBtn.addEventListener('click', () => {
+                this.thresholds = [...(this.thresholds || []), { value: '', alias: '', color: '#f44336' }];
+                this.renderRefLinesUI();
+                if (!this._config) this.saveSettings();
+            });
+        }
 
-        const threshInput2 = this.content.querySelector('#threshold2-input');
-        if (threshInput2) {
-            threshInput2.addEventListener('change', (e) => {
-                this.thresholdValue2 = e.target.value;
+        const yMinInput = this.content.querySelector('#y-min-input');
+        if (yMinInput) {
+            yMinInput.addEventListener('change', (e) => {
+                const v = e.target.value;
+                this.yMin = v === '' ? undefined : Number(v);
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+        }
+
+        const yMaxInput = this.content.querySelector('#y-max-input');
+        if (yMaxInput) {
+            yMaxInput.addEventListener('change', (e) => {
+                const v = e.target.value;
+                this.yMax = v === '' ? undefined : Number(v);
                 if (!this._config) this.saveSettings();
                 if (this._sensorDataCache.length > 0) this.updateChartFromCache();
             });
@@ -2991,9 +3503,23 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         yaml += `compareYear: ${this.compareYear}\n`;
         yaml += `hideAxislabels: ${this.hideAxislabels}\n`;
         yaml += `hideGrid: ${this.hideGrid}\n`;
+        yaml += `hideLegend: ${this.hideLegend}\n`;
+        yaml += `hideMonoBtn: ${this.hideMonoBtn}\n`;
+        yaml += `dateFormat: ${this.dateFormat}\n`;
+        yaml += `showPeaks: ${this.showPeaks}\n`;
+        yaml += `showNowLine: ${this.showNowLine}\n`;
+        yaml += `showDayNight: ${this.showDayNight}\n`;
         yaml += `chartTension: ${this.chartTension}\n`;
-        if (this.thresholdValue) yaml += `threshold: ${this.thresholdValue}\n`;
-        if (this.thresholdValue2) yaml += `threshold2: ${this.thresholdValue2}\n`;
+        if (this.thresholds && this.thresholds.length > 0) {
+            yaml += `thresholds:\n`;
+            this.thresholds.forEach(r => {
+                yaml += `  - value: ${r.value}\n`;
+                yaml += `    color: "${r.color}"\n`;
+                if (r.alias) yaml += `    alias: "${r.alias}"\n`;
+            });
+        }
+        if (this.yMin !== undefined) yaml += `yMin: ${this.yMin}\n`;
+        if (this.yMax !== undefined) yaml += `yMax: ${this.yMax}\n`;
         if (this.gridColumns > 1) yaml += `gridColumns: ${this.gridColumns}\n`;
 
         yaml += `sensors:\n`;
@@ -3019,10 +3545,17 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             zoomLevel: this.zoomLevel,
             autoScale: this.autoScale,
             compareYear: this.compareYear,
-            threshold: this.thresholdValue,
-            threshold2: this.thresholdValue2,
+            thresholds: this.thresholds,
+            yMin: this.yMin,
+            yMax: this.yMax,
             hideAxislabels: this.hideAxislabels,
             hideGrid: this.hideGrid,
+            hideLegend: this.hideLegend,
+            hideMonoBtn: this.hideMonoBtn,
+            dateFormat: this.dateFormat,
+            showPeaks: this.showPeaks,
+            showNowLine: this.showNowLine,
+            showDayNight: this.showDayNight,
             chartTension: this.chartTension,
             sensors: this.selectedSensors
         };
@@ -3050,32 +3583,152 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     handleSearch(query) {
         const list = this.content.querySelector('#suggestions');
-        if (!this._allSensors || this._allSensors.length === 0) return;
-        const q = query.toLowerCase();
+        if (!this._allSensors || this._allSensors.length === 0) { list.style.display = 'none'; return; }
+        const q = (query || '').toLowerCase();
+        const hass = this._hass;
+        list.innerHTML = '';
+        if (!this._searchSelection) this._searchSelection = new Set();
+
+        // --- Areas & Devices (only when the HA registry is available and something is typed) ---
+        let groupRows = 0;
+        if (q && hass && hass.areas && hass.devices) {
+            Object.values(hass.areas).forEach(area => {
+                if (groupRows >= 8) return;
+                const nm = (area.name || '').toLowerCase();
+                if (!nm.includes(q)) return;
+                const ids = this._areaSensors(area.area_id);
+                if (!ids.length) return;
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerHTML = `<div class="s-name">🗺️ ${area.name} <span style="opacity:.6;font-weight:400;">(${t('area')}, ${ids.length})</span></div><div class="s-id">${t('addAllInGroup')}</div>`;
+                div.onclick = () => { list.style.display = 'none'; this.content.querySelector('#sensor-input').value = ''; this.addMultipleSensors(ids); };
+                list.appendChild(div); groupRows++;
+            });
+            Object.values(hass.devices).forEach(dev => {
+                if (groupRows >= 12) return;
+                const label = dev.name_by_user || dev.name || '';
+                if (!label.toLowerCase().includes(q)) return;
+                const ids = this._deviceSensors(dev.id);
+                if (!ids.length) return;
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerHTML = `<div class="s-name">🔧 ${label} <span style="opacity:.6;font-weight:400;">(${t('device')}, ${ids.length})</span></div><div class="s-id">${t('addAllInGroup')}</div>`;
+                div.onclick = () => { list.style.display = 'none'; this.content.querySelector('#sensor-input').value = ''; this.addMultipleSensors(ids); };
+                list.appendChild(div); groupRows++;
+            });
+        }
+
+        // --- Entities (with multi-select checkboxes) ---
         const matches = this._allSensors.filter(id => {
+            if (this.selectedSensors.some(sel => sel.entityId === id)) return false;
             if (id.toLowerCase().includes(q)) return true;
-            const state = this._hass.states[id];
+            const state = hass.states[id];
             if (state && state.attributes.friendly_name && state.attributes.friendly_name.toLowerCase().includes(q)) return true;
             return false;
         }).slice(0, 50);
 
-        if (matches.length === 0) { list.style.display = 'none'; return; }
-        list.innerHTML = '';
         matches.forEach(id => {
+            const state = hass.states[id];
+            const friendly = state && state.attributes.friendly_name ? state.attributes.friendly_name : cleanName(id);
             const div = document.createElement('div');
             div.className = 'suggestion-item';
-            const name = cleanName(id);
-            const state = this._hass.states[id];
-            const friendly = state && state.attributes.friendly_name ? state.attributes.friendly_name : name;
-            div.innerHTML = `<div class="s-name">${friendly}</div><div class="s-id">${id}</div>`;
-            div.onclick = () => {
-                this.content.querySelector('#sensor-input').value = id;
-                list.style.display = 'none';
-                this.addSensor();
-            };
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.style.flexShrink = '0'; cb.style.width = '18px'; cb.style.height = '18px'; cb.style.cursor = 'pointer';
+            cb.style.appearance = 'auto'; cb.style.webkitAppearance = 'auto'; cb.style.accentColor = 'var(--accent-color, #03a9f4)'; cb.style.margin = '0';
+            cb.checked = this._searchSelection.has(id);
+            cb.onclick = (e) => { e.stopPropagation(); if (cb.checked) this._searchSelection.add(id); else this._searchSelection.delete(id); this._updateSearchFooter(); };
+            const txt = document.createElement('div');
+            txt.style.flex = '1'; txt.style.minWidth = '0'; txt.style.overflow = 'hidden'; txt.style.cursor = 'pointer';
+            txt.innerHTML = `<div class="s-name">${friendly}</div><div class="s-id">${id}</div>`;
+            txt.onclick = () => { list.style.display = 'none'; this._searchSelection.clear(); this.content.querySelector('#sensor-input').value = id; this.addSensor(); };
+            div.appendChild(cb); div.appendChild(txt);
             list.appendChild(div);
         });
+
+        if (list.children.length === 0) { list.style.display = 'none'; return; }
+
+        // --- Footer: add all checked entities at once ---
+        const footer = document.createElement('div');
+        footer.style.cssText = 'position:sticky;bottom:0;background:var(--secondary-background-color,#2c2c2c);border-top:1px solid var(--divider-color);padding:8px;';
+        footer.innerHTML = `<button id="add-selected-btn" class="btn-add-small" style="border-style:solid;">${t('addSelected')} (${this._searchSelection.size})</button>`;
+        list.appendChild(footer);
+        const addSelBtn = footer.querySelector('#add-selected-btn');
+        addSelBtn.onclick = (e) => {
+            e.stopPropagation();
+            const ids = Array.from(this._searchSelection);
+            this._searchSelection.clear();
+            list.style.display = 'none';
+            this.content.querySelector('#sensor-input').value = '';
+            if (ids.length) this.addMultipleSensors(ids);
+        };
+
         list.style.display = 'block';
+    }
+
+    _updateSearchFooter() {
+        const btn = this.content.querySelector('#add-selected-btn');
+        if (btn) btn.textContent = `${t('addSelected')} (${this._searchSelection ? this._searchSelection.size : 0})`;
+    }
+
+    _isTrackableEntity(eid) {
+        return eid && (eid.startsWith('sensor.') || eid.startsWith('binary_sensor.') || eid.startsWith('input_number.'));
+    }
+
+    _areaSensors(areaId) {
+        const hass = this._hass;
+        if (!hass || !hass.entities) return [];
+        const out = [];
+        Object.values(hass.entities).forEach(ent => {
+            const eid = ent.entity_id;
+            if (!this._isTrackableEntity(eid)) return;
+            if (ent.hidden || ent.disabled_by) return;
+            let a = ent.area_id;
+            if (!a && ent.device_id && hass.devices && hass.devices[ent.device_id]) a = hass.devices[ent.device_id].area_id;
+            if (a === areaId && hass.states[eid]) out.push(eid);
+        });
+        return out;
+    }
+
+    _deviceSensors(deviceId) {
+        const hass = this._hass;
+        if (!hass || !hass.entities) return [];
+        const out = [];
+        Object.values(hass.entities).forEach(ent => {
+            const eid = ent.entity_id;
+            if (ent.device_id !== deviceId) return;
+            if (!this._isTrackableEntity(eid)) return;
+            if (ent.hidden || ent.disabled_by) return;
+            if (hass.states[eid]) out.push(eid);
+        });
+        return out;
+    }
+
+    async addMultipleSensors(ids) {
+        let added = 0;
+        (ids || []).forEach((id) => {
+            if (this.selectedSensors.some(sel => sel.entityId === id)) return;
+            const color = paletteColorAt(this.selectedSensors.length);
+            this.selectedSensors.push({ entityId: id, color });
+            added++;
+        });
+        if (!added) return;
+        const ci = this.content.querySelector('#color-input');
+        if (ci) ci.value = paletteColorAt(this.selectedSensors.length);
+        this.renderSensorListUI();
+        if (!this._config) this.saveSettings();
+        this.loadHistory();
+    }
+
+    randomizeColors() {
+        const real = this.selectedSensors.filter(sel => !sel.isCard);
+        if (!real.length) return;
+        const palette = generatePalette(real.length, Math.floor(Math.random() * 360));
+        let i = 0;
+        this.selectedSensors.forEach(sel => { if (sel.isCard) return; sel.color = palette[i++]; });
+        if (!this._config) this.saveSettings();
+        this.renderSensorListUI();
+        if (this._sensorDataCache.length > 0) this.updateChartFromCache();
     }
 
     saveCurrentView() {
@@ -3116,10 +3769,17 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             zoomLevel: this.zoomLevel,
             autoScale: this.autoScale,
             compareYear: this.compareYear,
-            threshold: this.thresholdValue,
-            threshold2: this.thresholdValue2,
+            thresholds: this.thresholds,
+            yMin: this.yMin,
+            yMax: this.yMax,
             hideAxislabels: this.hideAxislabels,
             hideGrid: this.hideGrid,
+            hideLegend: this.hideLegend,
+            hideMonoBtn: this.hideMonoBtn,
+            dateFormat: this.dateFormat,
+            showPeaks: this.showPeaks,
+            showNowLine: this.showNowLine,
+            showDayNight: this.showDayNight,
             chartTension: this.chartTension
         };
         this.savedViews.push(viewConfig);
@@ -3156,11 +3816,18 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.showDonutSidebar = config.showDonutSidebar || false;
         this.zoomLevel = config.zoomLevel || 1.0;
         this.autoScale = config.autoScale || false;
-        this.thresholdValue = config.threshold || "";
-        this.thresholdValue2 = config.threshold2 || "";
+        this.thresholds = this._migrateThresholds(config);
         this.chartTension = config.chartTension !== undefined ? config.chartTension : 4;
+        this.yMin = this._parseAxisLimit(config.yMin);
+        this.yMax = this._parseAxisLimit(config.yMax);
         this.hideAxislabels = config.hideAxislabels || false;
         this.hideGrid = config.hideGrid || false;
+        this.hideLegend = config.hideLegend || false;
+        this.hideMonoBtn = config.hideMonoBtn || false;
+        this.dateFormat = config.dateFormat || 'dmy';
+        this.showPeaks = config.showPeaks || false;
+        this.showNowLine = config.showNowLine || false;
+        this.showDayNight = config.showDayNight || false;
 
         this.content.querySelector('#chart-type').value = config.chartType || 'line';
         this.content.querySelector('#time-select').value = config.timeSelect || '24';
@@ -3183,12 +3850,22 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.content.querySelector('#zoom-slider').value = this.zoomLevel;
         this.content.querySelector('#zoom-value-display').textContent = Math.round(this.zoomLevel * 100) + '%';
 
-        this.content.querySelector('#threshold-input').value = this.thresholdValue;
-        if (this.content.querySelector('#threshold2-input')) this.content.querySelector('#threshold2-input').value = this.thresholdValue2;
+        this.renderRefLinesUI();
+        const yMinEl = this.content.querySelector('#y-min-input');
+        if (yMinEl) yMinEl.value = this.yMin === undefined ? '' : this.yMin;
+        const yMaxEl = this.content.querySelector('#y-max-input');
+        if (yMaxEl) yMaxEl.value = this.yMax === undefined ? '' : this.yMax;
         this.content.querySelector('#autoscale-switch').checked = this.autoScale;
         this.content.querySelector('#compare-year-switch').checked = this.compareYear;
         this.content.querySelector('#hide-axis-switch').checked = this.hideAxislabels;
         this.content.querySelector('#hide-grid-switch').checked = this.hideGrid;
+        const legendSw = this.content.querySelector('#hide-legend-switch');
+        if (legendSw) legendSw.checked = this.hideLegend;
+        const dfSel = this.content.querySelector('#date-format-select');
+        if (dfSel) dfSel.value = this.dateFormat;
+        const pkSw = this.content.querySelector('#peaks-switch'); if (pkSw) pkSw.checked = this.showPeaks;
+        const nlSw = this.content.querySelector('#nowline-switch'); if (nlSw) nlSw.checked = this.showNowLine;
+        const dnSw = this.content.querySelector('#daynight-switch'); if (dnSw) dnSw.checked = this.showDayNight;
 
         this.updateSliderVisibility();
         this.updateStackedVisibility();
@@ -3242,7 +3919,7 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     updateStatsToggleVisibility() {
         const statsRow = this.content.querySelector('#toggle-stats-row');
-        if (this.layoutMode !== 'split') { statsRow.style.display = 'flex'; } else { statsRow.style.display = 'none'; }
+        if (statsRow) statsRow.style.display = 'flex';
     }
 
     updateDonutToggleVisibility() {
@@ -3267,15 +3944,20 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 showStats: this.showStats,
                 showDonutSidebar: this.showDonutSidebar,
                 zoomLevel: this.zoomLevel,
-                threshold: this.thresholdValue,
-                threshold2: this.thresholdValue2,
+                thresholds: this.thresholds,
                 autoScale: this.autoScale,
                 compareYear: this.compareYear,
                 hideAxislabels: this.hideAxislabels,
                 hideGrid: this.hideGrid,
-                hideAxislabels: this.hideAxislabels,
-                hideGrid: this.hideGrid,
+                hideLegend: this.hideLegend,
+                hideMonoBtn: this.hideMonoBtn,
+                dateFormat: this.dateFormat,
+                showPeaks: this.showPeaks,
+                showNowLine: this.showNowLine,
+                showDayNight: this.showDayNight,
                 chartTension: this.chartTension,
+                yMin: this.yMin,
+                yMax: this.yMax,
                 sidebarCollapsed: this.sidebarCollapsed
             };
             const singleContainer = this.content.querySelector('#chart-container-single');
@@ -3336,23 +4018,40 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 this.content.querySelector('#zoom-slider').value = this.zoomLevel;
                 this.content.querySelector('#zoom-value-display').textContent = Math.round(this.zoomLevel * 100) + '%';
             }
-            if (settings.threshold) {
-                this.thresholdValue = settings.threshold;
-                this.content.querySelector('#threshold-input').value = settings.threshold;
-            }
-            if (settings.threshold2) {
-                this.thresholdValue2 = settings.threshold2;
-                if (this.content.querySelector('#threshold2-input')) this.content.querySelector('#threshold2-input').value = settings.threshold2;
-            }
+            this.thresholds = this._migrateThresholds(settings);
+            this.renderRefLinesUI();
             if (settings.autoScale !== undefined) {
                 this.autoScale = settings.autoScale;
                 this.content.querySelector('#autoscale-switch').checked = settings.autoScale;
             }
+            if (settings.yMin !== undefined && settings.yMin !== null && settings.yMin !== '') {
+                this.yMin = Number(settings.yMin);
+                const el = this.content.querySelector('#y-min-input');
+                if (el) el.value = this.yMin;
+            }
+            if (settings.yMax !== undefined && settings.yMax !== null && settings.yMax !== '') {
+                this.yMax = Number(settings.yMax);
+                const el = this.content.querySelector('#y-max-input');
+                if (el) el.value = this.yMax;
+            }
             this.chartTension = settings.chartTension !== undefined ? settings.chartTension : 4;
 
             if (settings.hideAxislabels !== undefined) { this.hideAxislabels = settings.hideAxislabels; this.content.querySelector('#hide-axis-switch').checked = settings.hideAxislabels; }
-            if (settings.hideAxislabels !== undefined) { this.hideAxislabels = settings.hideAxislabels; this.content.querySelector('#hide-axis-switch').checked = settings.hideAxislabels; }
             if (settings.hideGrid !== undefined) { this.hideGrid = settings.hideGrid; this.content.querySelector('#hide-grid-switch').checked = settings.hideGrid; }
+            if (settings.hideLegend !== undefined) {
+                this.hideLegend = settings.hideLegend;
+                const el = this.content.querySelector('#hide-legend-switch');
+                if (el) el.checked = settings.hideLegend;
+            }
+            if (settings.hideMonoBtn !== undefined) this.hideMonoBtn = settings.hideMonoBtn;
+            if (settings.dateFormat) {
+                this.dateFormat = settings.dateFormat;
+                const dfSel = this.content.querySelector('#date-format-select');
+                if (dfSel) dfSel.value = settings.dateFormat;
+            }
+            if (settings.showPeaks !== undefined) { this.showPeaks = settings.showPeaks; const el = this.content.querySelector('#peaks-switch'); if (el) el.checked = settings.showPeaks; }
+            if (settings.showNowLine !== undefined) { this.showNowLine = settings.showNowLine; const el = this.content.querySelector('#nowline-switch'); if (el) el.checked = settings.showNowLine; }
+            if (settings.showDayNight !== undefined) { this.showDayNight = settings.showDayNight; const el = this.content.querySelector('#daynight-switch'); if (el) el.checked = settings.showDayNight; }
             if (settings.sidebarCollapsed !== undefined) {
                 this.sidebarCollapsed = settings.sidebarCollapsed;
                 this._applySidebarState();
@@ -3381,7 +4080,7 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         if (this.selectedSensors.some(s => s.entityId === entityId)) { alert(t('sensorAlreadyInList')); return; }
         this.selectedSensors.push({ entityId, color });
         input.value = '';
-        this.content.querySelector('#color-input').value = getRandomColor();
+        this.content.querySelector('#color-input').value = paletteColorAt(this.selectedSensors.length);
         this.renderSensorListUI();
         if (!this._config) this.saveSettings();
         if (this._globalStartTime && this._globalEndTime) {
@@ -3549,7 +4248,7 @@ window.customCards.push({
 
 /* detailed-charts-panel-editor.js */
 console.log(
-    "%c📉️ DetailedChartsPanelEditor: v_2.6 ready",
+    "%c📉️ DetailedChartsPanelEditor: v_2.7 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -3658,15 +4357,47 @@ class DetailedChartsPanelEditor extends HTMLElement {
 
                 /* SENSOR LIST STYLES */
                 .sensor-list { display: flex; flex-direction: column; gap: 10px; }
-                .sensor-row { 
-                    display: grid; 
-                    grid-template-columns: 40px 1fr 40px 40px; 
-                    gap: 12px; 
-                    align-items: center;
-                    background: var(--card-background-color, #202020); 
-                    padding: 8px; 
-                    border-radius: 6px; 
+                .sensor-row {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    background: var(--card-background-color, #202020);
+                    padding: 8px;
+                    border-radius: 6px;
                     border: 1px solid var(--divider-color);
+                }
+                .sensor-row-main {
+                    display: grid;
+                    grid-template-columns: 40px 1fr 40px 40px;
+                    gap: 12px;
+                    align-items: center;
+                }
+                .sensor-row-alias {
+                    display: grid;
+                    grid-template-columns: 40px 1fr 80px;
+                    gap: 12px;
+                    align-items: center;
+                }
+                .alias-input {
+                    width: 100%;
+                    box-sizing: border-box;
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid var(--divider-color);
+                    color: var(--primary-text-color);
+                    padding: 8px 10px;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                .alias-input:focus {
+                    outline: none;
+                    border-color: var(--primary-color);
+                }
+                .alias-label {
+                    color: var(--secondary-text-color);
+                    font-size: 12px;
+                    text-transform: uppercase;
+                    font-weight: 500;
+                    text-align: right;
                 }
                 
                 .color-wrap { position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid var(--divider-color); cursor: pointer; }
@@ -3737,14 +4468,35 @@ class DetailedChartsPanelEditor extends HTMLElement {
         const secDisp = document.createElement('div'); secDisp.className = 'section';
         secDisp.innerHTML = `<div class="section-title">${t('presentation')}</div>`;
         const row1 = document.createElement('div'); row1.className = 'row';
-        row1.appendChild(this._createSelector('chartType', t('chartTypeLabel'), { select: { mode: "dropdown", options: [{ label: t('line'), value: 'line' }, { label: t('bar'), value: 'bar' }, { label: t('scatter'), value: 'scatter' }, { label: t('doughnut'), value: 'doughnut' }, { label: t('stepped'), value: 'stepped' }] } }, c.chartType || 'line'));
+        row1.appendChild(this._createSelector('chartType', t('chartTypeLabel'), { select: { mode: "dropdown", options: [{ label: t('line'), value: 'line' }, { label: t('bar'), value: 'bar' }, { label: t('stackedArea'), value: 'stackedArea' }, { label: t('scatter'), value: 'scatter' }, { label: t('doughnut'), value: 'doughnut' }, { label: t('stepped'), value: 'stepped' }] } }, c.chartType || 'line'));
         row1.appendChild(this._createSelector('layoutMode', t('layoutLabel'), { select: { mode: "dropdown", options: [{ label: t('combined'), value: 'combined' }, { label: t('split'), value: 'split' }, { label: t('mixed'), value: 'mixed' }] } }, c.layoutMode || 'combined'));
         secDisp.appendChild(row1);
         const row2 = document.createElement('div'); row2.className = 'row';
         row2.appendChild(this._createSelector('zoomLevel', t('zoomLabel'), { number: { min: 0.5, max: 2.0, step: 0.1, mode: "box" } }, c.zoomLevel ?? 1.0));
         if (c.layoutMode !== 'combined') row2.appendChild(this._createSelector('gridColumns', t('columnsLabel'), { number: { min: 1, max: 6, step: 1, mode: "box" } }, c.gridColumns ?? 1));
         secDisp.appendChild(row2);
-        secDisp.appendChild(this._createSelector('threshold', t('thresholdLabel'), { text: {} }, c.threshold || ''));
+        const rowTension = document.createElement('div'); rowTension.className = 'row';
+        rowTension.appendChild(this._createSelector('chartTension', t('lineSmoothing'), { number: { min: 0, max: 5, step: 1, mode: "box" } }, c.chartTension ?? 4));
+        secDisp.appendChild(rowTension);
+        // Reference lines section
+        const refDiv = document.createElement('div'); refDiv.style.marginTop = '8px';
+        const refLabel = document.createElement('div'); refLabel.style.cssText = 'font-size:12px;font-weight:500;margin-bottom:4px;'; refLabel.textContent = t('refLinesLabel');
+        refDiv.appendChild(refLabel);
+        const refList = document.createElement('div'); refList.id = 'ref-lines-editor-list';
+        (c.thresholds || this._migrateThresholdsForEditor(c)).forEach((ref, i) => {
+            refList.appendChild(this._buildRefLineRow(ref, i));
+        });
+        refDiv.appendChild(refList);
+        const btnAddRef = document.createElement('button');
+        btnAddRef.className = 'btn-add'; btnAddRef.style.marginTop = '6px';
+        btnAddRef.innerText = t('addRefLineBtn');
+        btnAddRef.onclick = () => this._addRefLine();
+        refDiv.appendChild(btnAddRef);
+        secDisp.appendChild(refDiv);
+        const rowYAxis = document.createElement('div'); rowYAxis.className = 'row';
+        rowYAxis.appendChild(this._createSelector('yMin', t('yMinLabel'), { text: {} }, c.yMin ?? ''));
+        rowYAxis.appendChild(this._createSelector('yMax', t('yMaxLabel'), { text: {} }, c.yMax ?? ''));
+        secDisp.appendChild(rowYAxis);
         container.appendChild(secDisp);
 
         // --- SECTION 2: Zeitraum ---
@@ -3780,6 +4532,24 @@ class DetailedChartsPanelEditor extends HTMLElement {
         rowOpt3.appendChild(this._createSelector('hideGrid', t('hideGrid'), { boolean: {} }, c.hideGrid === true));
         secOpt.appendChild(rowOpt3);
 
+        const rowOpt3b = document.createElement('div'); rowOpt3b.className = 'row';
+        rowOpt3b.appendChild(this._createSelector('hideLegend', t('hideLegend'), { boolean: {} }, c.hideLegend === true));
+        rowOpt3b.appendChild(this._createSelector('hideMonoBtn', t('hideMonoBtn'), { boolean: {} }, c.hideMonoBtn === true));
+        secOpt.appendChild(rowOpt3b);
+
+        const rowOpt4 = document.createElement('div'); rowOpt4.className = 'row';
+        rowOpt4.appendChild(this._createSelector('dateFormat', t('dateFormat'), { select: { mode: "dropdown", options: [{ label: t('dateFormatDMY'), value: 'dmy' }, { label: t('dateFormatMDY'), value: 'mdy' }] } }, c.dateFormat || 'dmy'));
+        secOpt.appendChild(rowOpt4);
+
+        const rowOpt5 = document.createElement('div'); rowOpt5.className = 'row';
+        rowOpt5.appendChild(this._createSelector('showPeaks', t('showPeaks'), { boolean: {} }, c.showPeaks === true));
+        rowOpt5.appendChild(this._createSelector('showNowLine', t('showNowLine'), { boolean: {} }, c.showNowLine === true));
+        secOpt.appendChild(rowOpt5);
+
+        const rowOpt6 = document.createElement('div'); rowOpt6.className = 'row';
+        rowOpt6.appendChild(this._createSelector('showDayNight', t('showDayNight'), { boolean: {} }, c.showDayNight === true));
+        secOpt.appendChild(rowOpt6);
+
         if (c.chartType === 'bar' && c.layoutMode !== 'split') secOpt.appendChild(this._createSelector('stackedBars', t('stackedBars'), { boolean: {} }, c.stackedBars === true));
         container.appendChild(secOpt);
 
@@ -3791,6 +4561,8 @@ class DetailedChartsPanelEditor extends HTMLElement {
         (c.sensors || []).forEach((s, index) => {
             const row = document.createElement('div'); row.className = 'sensor-row';
 
+            const mainRow = document.createElement('div'); mainRow.className = 'sensor-row-main';
+
             // 1. Color
             const colWrap = document.createElement('div'); colWrap.className = 'color-wrap';
             colWrap.style.backgroundColor = s.color;
@@ -3798,7 +4570,7 @@ class DetailedChartsPanelEditor extends HTMLElement {
             colInp.type = 'color'; colInp.className = 'color-inp'; colInp.value = s.color;
             colInp.onchange = (e) => this._updateSensor(index, 'color', e.target.value);
             colWrap.appendChild(colInp);
-            row.appendChild(colWrap);
+            mainRow.appendChild(colWrap);
 
             // 2. Entity Selector
             const selContainer = document.createElement('div');
@@ -3810,7 +4582,7 @@ class DetailedChartsPanelEditor extends HTMLElement {
             entitySelector.hass = this._hass;
             entitySelector.addEventListener('value-changed', (e) => this._updateSensor(index, 'entityId', e.detail.value));
             selContainer.appendChild(entitySelector);
-            row.appendChild(selContainer);
+            mainRow.appendChild(selContainer);
 
             // 3. Hide Button
             const btnHide = document.createElement('button');
@@ -3818,7 +4590,7 @@ class DetailedChartsPanelEditor extends HTMLElement {
             btnHide.innerHTML = s.hidden ? ICONS.eyeClosed : ICONS.eyeOpen;
             btnHide.title = s.hidden ? t('show') : t('hide');
             btnHide.onclick = () => this._updateSensor(index, 'hidden', !s.hidden);
-            row.appendChild(btnHide);
+            mainRow.appendChild(btnHide);
 
             // 4. Delete Button
             const btnDel = document.createElement('button');
@@ -3826,7 +4598,26 @@ class DetailedChartsPanelEditor extends HTMLElement {
             btnDel.innerHTML = ICONS.delete;
             btnDel.title = t('remove');
             btnDel.onclick = () => this._removeSensor(index);
-            row.appendChild(btnDel);
+            mainRow.appendChild(btnDel);
+
+            row.appendChild(mainRow);
+
+            // 5. Alias Input (second row, aligned with entity selector)
+            const aliasRow = document.createElement('div'); aliasRow.className = 'sensor-row-alias';
+            const spacer = document.createElement('div');
+            aliasRow.appendChild(spacer);
+            const aliasInp = document.createElement('input');
+            aliasInp.type = 'text';
+            aliasInp.className = 'alias-input';
+            aliasInp.value = s.alias || '';
+            aliasInp.placeholder = t('aliasPlaceholder');
+            aliasInp.addEventListener('change', (e) => this._updateSensor(index, 'alias', e.target.value.trim()));
+            aliasRow.appendChild(aliasInp);
+            const aliasLbl = document.createElement('div');
+            aliasLbl.className = 'alias-label';
+            aliasLbl.textContent = t('aliasLabel');
+            aliasRow.appendChild(aliasLbl);
+            row.appendChild(aliasRow);
 
             sensorList.appendChild(row);
         });
@@ -3874,6 +4665,7 @@ class DetailedChartsPanelEditor extends HTMLElement {
         const sensors = [...(this._config.sensors || [])];
         const s = { ...sensors[index], [key]: val };
         if (key === 'hidden' && val === false) delete s.hidden;
+        if (key === 'alias' && !val) delete s.alias;
         sensors[index] = s;
         this._configChanged({ ...this._config, sensors });
     }
@@ -3888,6 +4680,67 @@ class DetailedChartsPanelEditor extends HTMLElement {
         const sensors = [...(this._config.sensors || [])];
         sensors.splice(index, 1);
         this._configChanged({ ...this._config, sensors });
+    }
+
+    _migrateThresholdsForEditor(c) {
+        const result = [];
+        if (c.threshold !== undefined && c.threshold !== '') result.push({ value: c.threshold, alias: c.thresholdAlias1 || '', color: '#f44336' });
+        if (c.threshold2 !== undefined && c.threshold2 !== '') result.push({ value: c.threshold2, alias: c.thresholdAlias2 || '', color: '#03a9f4' });
+        return result;
+    }
+
+    _buildRefLineRow(ref, index) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+
+        const colWrap = document.createElement('div');
+        colWrap.className = 'color-wrap';
+        colWrap.style.backgroundColor = ref.color || '#f44336';
+        const colInp = document.createElement('input');
+        colInp.type = 'color'; colInp.className = 'color-inp'; colInp.value = ref.color || '#f44336';
+        colInp.addEventListener('input', (e) => { colWrap.style.backgroundColor = e.target.value; });
+        colInp.onchange = (e) => this._updateRefLine(index, 'color', e.target.value);
+        colWrap.appendChild(colInp);
+        row.appendChild(colWrap);
+
+        const valInp = document.createElement('input');
+        valInp.type = 'number'; valInp.step = 'any'; valInp.value = ref.value !== undefined ? ref.value : '';
+        valInp.placeholder = t('refLineValue');
+        valInp.style.cssText = 'flex:1;min-width:0;padding:4px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);';
+        valInp.addEventListener('change', (e) => this._updateRefLine(index, 'value', e.target.value));
+        row.appendChild(valInp);
+
+        const aliasInp = document.createElement('input');
+        aliasInp.type = 'text'; aliasInp.value = ref.alias || '';
+        aliasInp.placeholder = t('refLineAlias');
+        aliasInp.style.cssText = 'flex:1;min-width:0;padding:4px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);';
+        aliasInp.addEventListener('change', (e) => this._updateRefLine(index, 'alias', e.target.value.trim()));
+        row.appendChild(aliasInp);
+
+        const btnDel = document.createElement('button');
+        btnDel.className = 'icon-btn delete'; btnDel.innerHTML = ICONS.delete; btnDel.title = t('remove');
+        btnDel.onclick = () => this._removeRefLine(index);
+        row.appendChild(btnDel);
+
+        return row;
+    }
+
+    _updateRefLine(index, key, val) {
+        const thresholds = [...(this._config.thresholds || this._migrateThresholdsForEditor(this._config))];
+        thresholds[index] = { ...thresholds[index], [key]: val };
+        this._configChanged({ ...this._config, thresholds, threshold: undefined, threshold2: undefined, thresholdAlias1: undefined, thresholdAlias2: undefined });
+    }
+
+    _addRefLine() {
+        const thresholds = [...(this._config.thresholds || this._migrateThresholdsForEditor(this._config))];
+        thresholds.push({ value: '', alias: '', color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0') });
+        this._configChanged({ ...this._config, thresholds, threshold: undefined, threshold2: undefined, thresholdAlias1: undefined, thresholdAlias2: undefined });
+    }
+
+    _removeRefLine(index) {
+        const thresholds = [...(this._config.thresholds || this._migrateThresholdsForEditor(this._config))];
+        thresholds.splice(index, 1);
+        this._configChanged({ ...this._config, thresholds, threshold: undefined, threshold2: undefined, thresholdAlias1: undefined, thresholdAlias2: undefined });
     }
 }
 
