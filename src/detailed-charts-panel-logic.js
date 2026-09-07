@@ -1,6 +1,6 @@
 /* detailed-charts-panel-logic.js */
 console.log(
-    "%c📉 DetailedChartsPanelLogic: v_2.6 ready",
+    "%c📉 DetailedChartsPanelLogic: v_2.7 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -8,6 +8,7 @@ import {
     cleanName,
     hexToRgba,
     calculateEnergySum,
+    isCumulativeSensor,
     processData,
     createStatsCard,
     getSplitCardHTML,
@@ -53,13 +54,41 @@ export class DetailedChartsLogic extends HTMLElement {
         this.zoomLevel = 1.0;
         this.monochromeMode = false;
         this.sidebarCollapsed = false;
-        this.thresholdValue = "";
-        this.thresholdValue2 = "";
+        this.thresholds = [];
         this.autoScale = false;
         this.chartTension = 4;
 
         this.hideAxislabels = false;
         this.hideGrid = false;
+        this.hideLegend = false;
+        this.hideMonoBtn = false;
+        this.dateFormat = 'dmy';
+        this.showPeaks = false;
+        this.showNowLine = false;
+        this.showDayNight = false;
+    }
+
+    _isCumulative(entityId, unit) {
+        const sc = this._hass?.states?.[entityId]?.attributes?.state_class;
+        return isCumulativeSensor(unit, sc);
+    }
+
+    _precisionFor(entityId) {
+        // Resolve the configured display precision: entity registry first (UI setting),
+        // then state attributes, then the integration's suggestion; fall back to 2.
+        if (!entityId) return 2;
+        const reg = this._hass?.entities?.[entityId];
+        if (reg) {
+            if (reg.display_precision !== undefined && reg.display_precision !== null) return reg.display_precision;
+            const op = reg.options?.sensor?.display_precision;
+            if (op !== undefined && op !== null) return op;
+        }
+        const attrs = this._hass?.states?.[entityId]?.attributes;
+        if (attrs) {
+            if (attrs.display_precision !== undefined && attrs.display_precision !== null) return attrs.display_precision;
+            if (attrs.suggested_display_precision !== undefined && attrs.suggested_display_precision !== null) return attrs.suggested_display_precision;
+        }
+        return 2;
     }
 
     // ... (existing imports)
@@ -182,7 +211,7 @@ export class DetailedChartsLogic extends HTMLElement {
                         let type = ds.type || chart.config.type;
                         if (type === 'stepped') type = 'line';
 
-                        let points = processData(newResults[sensorIdx], type, unit, startTime);
+                        let points = processData(newResults[sensorIdx], type, unit, startTime, this._isCumulative(conf.entityId, unit));
 
                         if (this.autoScale) {
                             if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -207,7 +236,7 @@ export class DetailedChartsLogic extends HTMLElement {
             let displayVal = curr.toFixed(precision);
 
             let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (endTime - startTime) / 3600000;
                 const isAggregated = (type === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -219,25 +248,25 @@ export class DetailedChartsLogic extends HTMLElement {
         // Update Split Cards (Footer)
         this.selectedSensors.forEach((s, idx) => {
             if (s.isCard) return;
-            // Suche Footer im ShadowRoot (funktioniert für Mixed & Split Layout)
-            // Hinweis: Im Mixed Mode sind die Split-Indizes oft verschoben oder separat, 
-            // aber renderSplitView nutzt dataset-index.
             const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${idx}"]`);
             if (card) {
                 const footer = card.querySelector('.split-stats-box');
                 if (footer) {
+                    if (!this.showStats) { footer.style.display = 'none'; return; }
+                    footer.style.display = '';
                     const sensorIdx = realSensors.findIndex(rs => rs.entityId === s.entityId);
                     if (sensorIdx >= 0 && newResults[sensorIdx]) {
                         const unit = this._hass.states[s.entityId]?.attributes?.unit_of_measurement || '';
                         let type = s.typeOverride || this.content.querySelector('#chart-type').value;
+                        if (type === 'stackedArea') type = 'line';
                         if (this.stackedBars) type = 'bar';
 
-                        let points = processData(newResults[sensorIdx], type, unit, startTime);
+                        let points = processData(newResults[sensorIdx], type, unit, startTime, this._isCumulative(s.entityId, unit));
                         if (this.autoScale) {
                             if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                             if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                         }
-                        const precision = this._hass.states[s.entityId]?.attributes?.display_precision ?? 2;
+                        const precision = this._precisionFor(s.entityId);
                         const stats = calcStats(points, unit, type, precision);
                         footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max);
                     }
@@ -253,18 +282,107 @@ export class DetailedChartsLogic extends HTMLElement {
                 if (s.hidden) return;
                 const unit = this._hass.states[s.entityId]?.attributes?.unit_of_measurement || '';
                 let type = this.content.querySelector('#chart-type').value;
+                if (type === 'stackedArea') type = 'line';
                 if (this.stackedBars) type = 'bar';
 
-                let points = processData(newResults[idx], type, unit, startTime);
+                let points = processData(newResults[idx], type, unit, startTime, this._isCumulative(s.entityId, unit));
                 if (this.autoScale) {
                     if (unit === 'W' || unit === 'kW') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                     if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                 }
-                const precision = this._hass.states[s.entityId]?.attributes?.display_precision ?? 2;
+                const precision = this._precisionFor(s.entityId);
                 const stats = calcStats(points, unit, type, precision);
                 html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label);
             });
             statsWrapper.innerHTML = html;
+        }
+    }
+
+    _updateVisibleStats(chart, sensorIndex) {
+        if (!this.showStats) return;
+        const xMin = chart.scales.x.min;
+        const xMax = chart.scales.x.max;
+
+        if (sensorIndex !== null && sensorIndex !== undefined) {
+            const conf = this.selectedSensors[sensorIndex];
+            if (!conf || conf.isCard) return;
+            const dataset = chart.data.datasets.find(d => d._entityId === conf.entityId);
+            if (!dataset) return;
+
+            const visiblePoints = dataset.data.filter(p => p.x >= xMin && p.x <= xMax);
+            if (!visiblePoints.length) return;
+
+            let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
+            if (this.autoScale) {
+                if (unit === 'W') unit = 'kW';
+                else if (unit === 'Wh') unit = 'kWh';
+            }
+            const precision = this._precisionFor(conf.entityId);
+            const values = visiblePoints.map(p => p.y);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const curr = values[values.length - 1];
+
+            let displayVal = curr.toFixed(precision);
+            let displayLabel = t('current');
+            if (this._isCumulative(conf.entityId, unit)) {
+                const hours = (xMax - xMin) / 3600000;
+                let type = conf.typeOverride || this.content.querySelector('#chart-type').value;
+                if (type === 'stackedArea') type = 'line';
+                if (this.stackedBars) type = 'bar';
+                const isAggregated = (type === 'bar' && hours > 24);
+                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
+                displayLabel = t('sum');
+            }
+
+            const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${sensorIndex}"]`);
+            if (card) {
+                const footer = card.querySelector('.split-stats-box');
+                if (footer) {
+                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision));
+                }
+            }
+        } else {
+            const statsWrapper = this.shadowRoot.querySelector('#stats-wrapper') || this.shadowRoot.querySelector('#stats-wrapper-top');
+            if (!statsWrapper || statsWrapper.style.display === 'none') return;
+
+            let html = '';
+            chart.data.datasets.forEach(ds => {
+                if (!ds._entityId) return;
+                if (ds.hidden) return;
+                const conf = this.selectedSensors.find(s => s.entityId === ds._entityId);
+                if (!conf || conf.hidden) return;
+
+                const visiblePoints = ds.data.filter(p => p.x >= xMin && p.x <= xMax);
+                if (!visiblePoints.length) return;
+
+                let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
+                if (this.autoScale) {
+                    if (unit === 'W') unit = 'kW';
+                    else if (unit === 'Wh') unit = 'kWh';
+                }
+                const precision = this._precisionFor(conf.entityId);
+                const values = visiblePoints.map(p => p.y);
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                const curr = values[values.length - 1];
+
+                let displayVal = curr.toFixed(precision);
+                let displayLabel = t('current');
+                if (this._isCumulative(conf.entityId, unit)) {
+                    const hours = (xMax - xMin) / 3600000;
+                    let type = this.content.querySelector('#chart-type').value;
+                    if (type === 'stackedArea') type = 'line';
+                    if (this.stackedBars) type = 'bar';
+                    const isAggregated = (type === 'bar' && hours > 24);
+                    displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
+                    displayLabel = t('sum');
+                }
+                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel);
+            });
+            if (html) statsWrapper.innerHTML = html;
         }
     }
 
@@ -304,9 +422,10 @@ export class DetailedChartsLogic extends HTMLElement {
             if (chart) {
                 const unit = this._hass.states[sensorConfig.entityId]?.attributes?.unit_of_measurement || '';
                 let currentType = sensorConfig.typeOverride || this.content.querySelector('#chart-type').value;
+                if (currentType === 'stackedArea') currentType = 'line';
                 if (this.stackedBars) currentType = 'bar';
 
-                let points = processData(newData, currentType, unit, startTime);
+                let points = processData(newData, currentType, unit, startTime, this._isCumulative(sensorConfig.entityId, unit));
 
                 // AutoScale logic locally applied
                 if (this.autoScale) {
@@ -336,7 +455,7 @@ export class DetailedChartsLogic extends HTMLElement {
 
                     // Process
                     const shiftTime = 365 * 24 * 60 * 60 * 1000;
-                    const rawPrevPoints = processData(prevData, currentType, unit, new Date(startTime.getTime() - shiftTime));
+                    const rawPrevPoints = processData(prevData, currentType, unit, new Date(startTime.getTime() - shiftTime), this._isCumulative(sensorConfig.entityId, unit));
                     prevPoints = rawPrevPoints.map(p => ({ x: p.x + shiftTime, y: p.y }));
 
                     if (this.autoScale) {
@@ -365,12 +484,12 @@ export class DetailedChartsLogic extends HTMLElement {
                 const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${index}"]`);
                 if (card) {
                     const footer = card.querySelector(`#footer-${index} .split-stats-box`);
-                    if (footer) {
-                        const precision = this._hass.states[sensorConfig.entityId]?.attributes?.display_precision ?? 2;
+                    if (footer && this.showStats) {
+                        const precision = this._precisionFor(sensorConfig.entityId);
                         let displayVal = curr.toFixed(precision);
 
                         let displayLabel = t('current');
-                        if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+                        if (this._isCumulative(sensorConfig.entityId, unit)) {
                             const hours = (endTime - startTime) / 3600000;
                             const isAggregated = (currentType === 'bar' && hours > 24);
                             displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -523,9 +642,9 @@ export class DetailedChartsLogic extends HTMLElement {
             const isPercent = unit === '%' || cleanName(conf.entityId).toLowerCase().includes('soc');
             if (isPercent) return;
 
-            const points = processData(obj.data, 'bar', unit, st);
+            const points = processData(obj.data, 'bar', unit, st, this._isCumulative(conf.entityId, unit));
             const valArray = points.map(p => p.y);
-            const isEnergy = unit && (unit.includes("Wh") || unit.includes("kWh"));
+            const isEnergy = this._isCumulative(conf.entityId, unit);
             let sensorSum = 0;
             if (isEnergy) { sensorSum = calculateEnergySum(valArray, isDailyAgg); } else { sensorSum = valArray.reduce((a, b) => a + b, 0); }
             if (sensorSum > 0) {
@@ -614,8 +733,12 @@ export class DetailedChartsLogic extends HTMLElement {
 
         const monoBtn = wrapper.querySelector('#toggle-mono-btn');
         if (monoBtn) {
-            monoBtn.addEventListener('click', () => this.toggleMonochrome());
-            if (!this.monochromeMode) monoBtn.classList.add('active');
+            if (this.hideMonoBtn) {
+                monoBtn.style.display = 'none';
+            } else {
+                monoBtn.addEventListener('click', () => this.toggleMonochrome());
+                if (!this.monochromeMode) monoBtn.classList.add('active');
+            }
         }
 
         if (chartType === 'doughnut') { this.renderDoughnut(cacheData, ctx, statsWrapper); return; }
@@ -624,6 +747,10 @@ export class DetailedChartsLogic extends HTMLElement {
         let allStatsHTML = '';
         const st = this._globalStartTime || cacheData[0]?.startTime || new Date();
         const et = this._globalEndTime || cacheData[0]?.endTime || new Date();
+
+        const isStackedArea = (chartType === 'stackedArea');
+        let stackOrdinal = 0;
+        const stackMemberDatasets = [];
 
         let hasSecondaryAxis = false;
         let cacheIdx = 0;
@@ -640,13 +767,13 @@ export class DetailedChartsLogic extends HTMLElement {
             const useRightAxis = (unit === '%' || cleanName(conf.entityId).toLowerCase().includes('soc'));
             if (useRightAxis) hasSecondaryAxis = true;
 
-            let effectiveType = this.stackedBars ? 'bar' : chartType;
+            let effectiveType = this.stackedBars ? 'bar' : (isStackedArea ? 'line' : chartType);
             if (useRightAxis || isBinary) effectiveType = 'line';
 
             let isStepped = false;
             if (effectiveType === 'stepped' || isBinary) { effectiveType = 'line'; isStepped = true; }
 
-            let points = processData(sensorDataObj.data, effectiveType, unit, st);
+            let points = processData(sensorDataObj.data, effectiveType, unit, st, this._isCumulative(conf.entityId, unit));
             if (!points.length) return;
 
             if (this.autoScale) {
@@ -654,13 +781,13 @@ export class DetailedChartsLogic extends HTMLElement {
                 else if (unit === 'Wh') { points = points.map(p => ({ x: p.x, y: p.y / 1000 })); unit = 'kWh'; }
             }
 
-            const precision = this._hass.states[conf.entityId]?.attributes?.display_precision ?? 2;
+            const precision = this._precisionFor(conf.entityId);
             const values = points.map(p => p.y);
             const min = Math.min(...values); const max = Math.max(...values);
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (et - st) / 3600000;
                 const isAggregated = (effectiveType === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
@@ -668,9 +795,13 @@ export class DetailedChartsLogic extends HTMLElement {
             }
             allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel);
 
+            const isStackMember = isStackedArea && !isBinary && !useRightAxis;
+
             let dsBgColor = conf.color;
             if (isBinary) {
                 dsBgColor = hexToRgba(conf.color, 0.2);
+            } else if (isStackMember) {
+                dsBgColor = hexToRgba(conf.color, 0.55);
             } else if (this.fillArea && effectiveType === 'line') {
                 const grad = ctx.createLinearGradient(0, 0, 0, 400);
                 grad.addColorStop(0, hexToRgba(conf.color, 0.5));
@@ -678,16 +809,24 @@ export class DetailedChartsLogic extends HTMLElement {
                 dsBgColor = grad;
             }
 
+            let fillValue;
+            if (isStackMember) {
+                fillValue = (stackOrdinal === 0) ? 'origin' : '-1';
+                stackOrdinal++;
+            } else {
+                fillValue = (isBinary) ? true : (this.fillArea && !this.monochromeMode);
+            }
+
             const isHidden = conf.hidden === true;
             // --- UPDATED: Use alias and store entityId ---
-            datasets.push({
+            const ds = {
                 label: conf.alias || cleanName(conf.entityId),
                 _entityId: conf.entityId, // Store original ID for lookups
                 hidden: isHidden,
                 data: points,
                 borderColor: conf.color,
                 backgroundColor: dsBgColor,
-                fill: (isBinary) ? true : (this.fillArea && !this.monochromeMode),
+                fill: fillValue,
                 borderWidth: (isBinary) ? 1 : (effectiveType === 'bar' ? 0 : 2.5),
                 categoryPercentage: 0.98,
                 barPercentage: 0.98,
@@ -700,36 +839,59 @@ export class DetailedChartsLogic extends HTMLElement {
                 yAxisID: isBinary ? 'y_binary' : (useRightAxis ? 'y1' : 'y'),
                 type: effectiveType,
                 order: isBinary ? 10 : 0,
-                spanGaps: true
+                spanGaps: true,
+                stack: isStackMember ? 'stackArea' : undefined
+            };
+            datasets.push(ds);
+            if (isStackMember) stackMemberDatasets.push(ds);
+        });
+
+        if (isStackedArea && stackMemberDatasets.length >= 2) {
+            const allX = new Set();
+            stackMemberDatasets.forEach(d => d.data.forEach(p => allX.add(p.x)));
+            let xs = Array.from(allX).sort((a, b) => a - b);
+            const MAX_TICKS = 1500;
+            if (xs.length > MAX_TICKS) {
+                const step = Math.ceil(xs.length / MAX_TICKS);
+                xs = xs.filter((_, i) => i % step === 0);
+            }
+            stackMemberDatasets.forEach(d => {
+                const src = d.data;
+                const resampled = new Array(xs.length);
+                let i = 0;
+                let last = 0;
+                let started = false;
+                for (let k = 0; k < xs.length; k++) {
+                    const x = xs[k];
+                    while (i < src.length && src[i].x <= x) {
+                        last = src[i].y;
+                        started = true;
+                        i++;
+                    }
+                    resampled[k] = { x, y: started ? last : 0 };
+                }
+                d.data = resampled;
+            });
+        }
+
+        (this.thresholds || []).forEach((ref, i) => {
+            if (ref.value === undefined || ref.value === '') return;
+            const val = parseFloat(ref.value);
+            if (isNaN(val)) return;
+            datasets.push({
+                label: ref.alias || `Limit${i + 1}`,
+                data: [{ x: st.getTime(), y: val }, { x: et.getTime(), y: val }],
+                borderColor: ref.color || '#f44336', borderWidth: 1.5, borderDash: [10, 5],
+                pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1,
+                _isThreshold: true
             });
         });
 
-        if (this.thresholdValue !== null && this.thresholdValue !== '') {
-            const val = parseFloat(this.thresholdValue);
-            if (!isNaN(val)) {
-                datasets.push({
-                    label: 'Limit',
-                    data: [{ x: st.getTime(), y: val }, { x: et.getTime(), y: val }],
-                    borderColor: '#f44336', borderWidth: 1.5, borderDash: [10, 5],
-                    pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1
-                });
-            }
-        }
-        if (this.thresholdValue2 !== null && this.thresholdValue2 !== '') {
-            const val2 = parseFloat(this.thresholdValue2);
-            if (!isNaN(val2)) {
-                datasets.push({
-                    label: 'Limit2',
-                    data: [{ x: st.getTime(), y: val2 }, { x: et.getTime(), y: val2 }],
-                    borderColor: '#03a9f4', borderWidth: 1.5, borderDash: [10, 5],
-                    pointRadius: 0, fill: false, type: 'line', yAxisID: 'y', order: -1
-                });
-            }
-        }
-
         if (statsWrapper) statsWrapper.innerHTML = allStatsHTML;
-        const finalChartType = (this.stackedBars ? 'bar' : (chartType === 'stepped' ? 'line' : chartType));
-        this.createChartInstance(ctx, finalChartType, datasets, st, et, true, null, false, hasSecondaryAxis);
+        const finalChartType = this.stackedBars
+            ? 'bar'
+            : (isStackedArea || chartType === 'stepped' ? 'line' : chartType);
+        this.createChartInstance(ctx, finalChartType, datasets, st, et, true, null, this.hideLegend, hasSecondaryAxis, false, isStackedArea);
 
         if (this.showDonutSidebar && chartType !== 'doughnut') {
             const donutCanvas = wrapper.querySelector('#canvas-side-donut');
@@ -813,6 +975,7 @@ export class DetailedChartsLogic extends HTMLElement {
             card.addEventListener('drop', (e) => { e.preventDefault(); const fromIndex = parseInt(e.dataTransfer.getData('text/plain')); if (fromIndex !== idx) { this.reorderSensors(fromIndex, idx); } });
 
             let currentType = conf.typeOverride || globalChartType;
+            if (currentType === 'stackedArea') currentType = 'line';
             let unit = this._hass.states[conf.entityId]?.attributes?.unit_of_measurement || '';
             const isBinary = conf.entityId.startsWith('binary_sensor.') || (this._hass.states[conf.entityId]?.attributes?.device_class === 'binary_sensor');
             if (isBinary) currentType = 'line';
@@ -820,7 +983,7 @@ export class DetailedChartsLogic extends HTMLElement {
             let isStepped = false;
             if (currentType === 'stepped' || isBinary) { currentType = 'line'; isStepped = true; }
 
-            let points = processData(sensorDataObj.data, currentType, unit, chartSt);
+            let points = processData(sensorDataObj.data, currentType, unit, chartSt, this._isCumulative(conf.entityId, unit));
 
             // Previous Year Logic (Visuals)
             let prevPoints = [];
@@ -829,7 +992,7 @@ export class DetailedChartsLogic extends HTMLElement {
                 // NOTE: This simple shift might not account for leap years perfectly, but is usually sufficient for visuals.
                 const shiftTime = 365 * 24 * 60 * 60 * 1000;
                 // Process raw prev data first
-                const rawPrevPoints = processData(sensorDataObj.prevData, currentType, unit, new Date(chartSt.getTime() - shiftTime));
+                const rawPrevPoints = processData(sensorDataObj.prevData, currentType, unit, new Date(chartSt.getTime() - shiftTime), this._isCumulative(conf.entityId, unit));
 
                 prevPoints = rawPrevPoints.map(p => ({
                     x: p.x + shiftTime,
@@ -847,20 +1010,26 @@ export class DetailedChartsLogic extends HTMLElement {
                 else if (unit === 'Wh') { points = points.map(p => ({ x: p.x, y: p.y / 1000 })); unit = 'kWh'; }
             }
 
-            const precision = this._hass.states[conf.entityId]?.attributes?.display_precision ?? 2;
+            const precision = this._precisionFor(conf.entityId);
             const values = points.map(p => p.y);
             const min = Math.min(...values); const max = Math.max(...values);
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
-            if (unit && (unit.includes("Wh") || unit.includes("kWh"))) {
+            if (this._isCumulative(conf.entityId, unit)) {
                 const isAggregated = (currentType === 'bar' && hours > 24);
                 displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                 displayLabel = t('sum');
             }
 
             const footer = card.querySelector(`#footer-${idx}`);
-            footer.querySelector('.split-stats-box').innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+            const statsBox = footer.querySelector('.split-stats-box');
+            if (this.showStats) {
+                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+                statsBox.style.display = '';
+            } else {
+                statsBox.style.display = 'none';
+            }
 
             const controlsBox = document.createElement('div');
             controlsBox.className = 'split-controls-box';
@@ -892,7 +1061,7 @@ export class DetailedChartsLogic extends HTMLElement {
                 let prevPoints = [];
                 if (this.compareYear && sensorDataObj.prevData && sensorDataObj.prevData.length > 0) {
                     const shiftTime = 365 * 24 * 60 * 60 * 1000;
-                    const rawPrevPoints = processData(sensorDataObj.prevData, newType, unit, new Date(sensorDataObj.startTime.getTime() - shiftTime));
+                    const rawPrevPoints = processData(sensorDataObj.prevData, newType, unit, new Date(sensorDataObj.startTime.getTime() - shiftTime), this._isCumulative(conf.entityId, unit));
                     prevPoints = rawPrevPoints.map(p => ({ x: p.x + shiftTime, y: p.y }));
                     if (this.autoScale) {
                         if (unit === 'W' || unit === 'kW') prevPoints = prevPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -900,7 +1069,7 @@ export class DetailedChartsLogic extends HTMLElement {
                     }
                 }
 
-                let newPoints = processData(sensorDataObj.data, newType, unit, sensorDataObj.startTime);
+                let newPoints = processData(sensorDataObj.data, newType, unit, sensorDataObj.startTime, this._isCumulative(conf.entityId, unit));
                 if (this.autoScale) {
                     if (unit === 'W' || unit === 'kW') newPoints = newPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
                     if (unit === 'Wh' || unit === 'kWh') newPoints = newPoints.map(p => ({ x: p.x, y: p.y / 1000 }));
@@ -1056,12 +1225,13 @@ export class DetailedChartsLogic extends HTMLElement {
         });
     }
 
-    createChartInstance(ctx, type, datasets, startTime, endTime, showZoomBtn, sensorIndex, hideLegend, hasSecondaryAxis, forceNoStack = false) {
+    createChartInstance(ctx, type, datasets, startTime, endTime, showZoomBtn, sensorIndex, hideLegend, hasSecondaryAxis, forceNoStack = false, forceStack = false) {
         const styles = getComputedStyle(this);
         const textColor = styles.getPropertyValue('--primary-text-color').trim();
         const gridColor = styles.getPropertyValue('--divider-color').trim();
         const secondaryText = styles.getPropertyValue('--secondary-text-color').trim();
         const resetBtn = this.content.querySelector('#reset-zoom-btn');
+        const self = this;
 
         if (window.Chart && !window.Chart.Tooltip.positioners.smartCorner) {
             window.Chart.Tooltip.positioners.smartCorner = function (elements, eventPosition) {
@@ -1150,10 +1320,107 @@ export class DetailedChartsLogic extends HTMLElement {
             }
         };
 
+        const peakMarkerPlugin = {
+            id: 'peakMarkers',
+            afterDatasetsDraw: (chart) => {
+                if (!self.showPeaks) return;
+                const ctx = chart.ctx;
+                chart.data.datasets.forEach((ds, i) => {
+                    if (!ds._entityId) return;
+                    if (ds.type === 'bar') return;
+                    if (!chart.isDatasetVisible(i)) return;
+                    const meta = chart.getDatasetMeta(i);
+                    if (!meta || !meta.data || !meta.data.length) return;
+                    const pts = ds.data;
+                    if (!pts || pts.length < 2) return;
+                    let iMin = 0, iMax = 0;
+                    for (let k = 1; k < pts.length; k++) {
+                        if (pts[k].y < pts[iMin].y) iMin = k;
+                        if (pts[k].y > pts[iMax].y) iMax = k;
+                    }
+                    const iLast = pts.length - 1;
+                    const state = self._hass?.states?.[ds._entityId];
+                    let unit = state?.attributes?.unit_of_measurement || '';
+                    if (self.autoScale) { if (unit === 'W') unit = 'kW'; else if (unit === 'Wh') unit = 'kWh'; }
+                    const precision = self._precisionFor(ds._entityId);
+                    const color = (typeof ds.borderColor === 'string') ? ds.borderColor : '#888';
+                    const drawMarker = (idx, tag, isMin) => {
+                        const el = meta.data[idx];
+                        if (!el) return;
+                        const x = el.x, y = el.y;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+                        ctx.fillStyle = color; ctx.fill();
+                        ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+                        const label = `${tag} ${Number(pts[idx].y).toFixed(precision)}${unit ? ' ' + unit : ''}`;
+                        ctx.font = 'bold 10px Roboto, sans-serif';
+                        ctx.textBaseline = 'bottom';
+                        ctx.textAlign = (x > chart.chartArea.right - 60) ? 'right' : 'left';
+                        const tx = ctx.textAlign === 'right' ? x - 6 : x + 6;
+                        const ty = isMin ? y + 14 : y - 5;
+                        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(label, tx, ty);
+                        ctx.fillStyle = color; ctx.fillText(label, tx, ty);
+                        ctx.restore();
+                    };
+                    drawMarker(iMax, t('peakMax'), false);
+                    drawMarker(iMin, t('peakMin'), true);
+                    drawMarker(iLast, t('peakLast'), false);
+                });
+            }
+        };
+
+        const nowLineDayNightPlugin = {
+            id: 'nowLineDayNight',
+            beforeDatasetsDraw: (chart) => {
+                if (!self.showDayNight) return;
+                const xScale = chart.scales.x;
+                if (!xScale) return;
+                const min = xScale.min, max = xScale.max;
+                const rangeH = (max - min) / 3600000;
+                if (rangeH > 24 * 21 || rangeH < 1) return;
+                const c = chart.ctx;
+                const { top, bottom } = chart.chartArea;
+                c.save();
+                c.fillStyle = 'rgba(120, 130, 170, 0.10)';
+                const d0 = new Date(min); d0.setHours(0, 0, 0, 0);
+                for (let day = d0.getTime() - 86400000; day <= max + 86400000; day += 86400000) {
+                    const nightStart = day + 20 * 3600000;
+                    const nightEnd = day + 30 * 3600000;
+                    const a = Math.max(nightStart, min);
+                    const b = Math.min(nightEnd, max);
+                    if (b <= a) continue;
+                    const xa = xScale.getPixelForValue(a);
+                    const xb = xScale.getPixelForValue(b);
+                    c.fillRect(xa, top, xb - xa, bottom - top);
+                }
+                c.restore();
+            },
+            afterDatasetsDraw: (chart) => {
+                if (!self.showNowLine) return;
+                const xScale = chart.scales.x;
+                if (!xScale) return;
+                const now = Date.now();
+                if (now < xScale.min || now > xScale.max) return;
+                const x = xScale.getPixelForValue(now);
+                const { top, bottom } = chart.chartArea;
+                const c = chart.ctx;
+                c.save();
+                c.beginPath(); c.moveTo(x, top); c.lineTo(x, bottom);
+                c.lineWidth = 1.5; c.strokeStyle = 'rgba(244, 67, 54, 0.85)';
+                c.setLineDash([4, 4]); c.stroke(); c.setLineDash([]);
+                c.fillStyle = 'rgba(244, 67, 54, 0.95)';
+                c.font = 'bold 10px Roboto, sans-serif';
+                c.textAlign = (x > chart.chartArea.right - 40) ? 'right' : 'left';
+                c.fillText(t('nowLabel'), c.textAlign === 'right' ? x - 4 : x + 4, top + 10);
+                c.restore();
+            }
+        };
+
         const chart = new window.Chart(ctx, {
             type: type === 'stepped' ? 'line' : type,
             data: { datasets },
-            plugins: [verticalHoverLine, drawValuesPlugin],
+            plugins: [verticalHoverLine, drawValuesPlugin, peakMarkerPlugin, nowLineDayNightPlugin],
             options: {
                 responsive: true, maintainAspectRatio: false,
                 animation: { duration: 0 }, hover: { animationDuration: 0 },
@@ -1176,7 +1443,7 @@ export class DetailedChartsLogic extends HTMLElement {
                         },
                         backgroundColor: 'rgba(20, 20, 20, 0.95)', titleColor: '#fff', bodyColor: '#bbb', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, padding: 12,
                         callbacks: {
-                            title: (c) => new Date(c[0].parsed.x).toLocaleString('de-DE'),
+                            title: (c) => new Date(c[0].parsed.x).toLocaleString(this.dateFormat === 'mdy' ? 'en-US' : 'de-DE'),
                             label: (c) => {
                                 const ds = c.dataset;
                                 const lbl = ds.label || '';
@@ -1188,9 +1455,7 @@ export class DetailedChartsLogic extends HTMLElement {
                                 if (ds._entityId) {
                                     const state = this._hass.states[ds._entityId];
                                     unit = state?.attributes?.unit_of_measurement || '';
-                                    if (state?.attributes?.display_precision !== undefined && state?.attributes?.display_precision !== null) {
-                                        precision = state.attributes.display_precision;
-                                    }
+                                    precision = this._precisionFor(ds._entityId);
                                     if (ds._entityId.startsWith('binary_sensor.') || state?.attributes?.device_class === 'binary_sensor') isBinary = true;
                                 } else {
                                     // Fallback search (match label or entity name)
@@ -1198,9 +1463,7 @@ export class DetailedChartsLogic extends HTMLElement {
                                     if (s) {
                                         const state = this._hass.states[s.entityId];
                                         unit = state?.attributes?.unit_of_measurement || '';
-                                        if (state?.attributes?.display_precision !== undefined && state?.attributes?.display_precision !== null) {
-                                            precision = state.attributes.display_precision;
-                                        }
+                                        precision = this._precisionFor(s.entityId);
                                         if (s.entityId.startsWith('binary_sensor.') || state?.attributes?.device_class === 'binary_sensor') isBinary = true;
                                     }
                                 }
@@ -1240,20 +1503,22 @@ export class DetailedChartsLogic extends HTMLElement {
                             onPanComplete: ({ chart }) => {
                                 const min = chart.scales.x.min; const max = chart.scales.x.max; chart.stop();
                                 if (this.layoutMode !== 'combined' && sensorIndex !== null) { this.loadSingleSensorHistory(sensorIndex, new Date(min), new Date(max)); }
-                                else { if (min < startTime.getTime() || max > endTime.getTime()) { this.loadSpecificRange(new Date(min), new Date(max)); } }
+                                else { if (min < startTime.getTime() || max > endTime.getTime()) { this.loadSpecificRange(new Date(min), new Date(max)); } else { this._updateVisibleStats(chart, sensorIndex); } }
                             }
                         },
-                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x', onZoom: () => { if (showZoomBtn) resetBtn.style.display = 'block'; } }
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x', onZoom: () => { if (showZoomBtn) resetBtn.style.display = 'block'; }, onZoomComplete: ({ chart }) => { this._updateVisibleStats(chart, sensorIndex); const xMin = chart.scales.x.min; const xMax = chart.scales.x.max; let refUpdated = false; chart.data.datasets.forEach(ds => { if (ds._isThreshold) { if (ds.data.length === 2) { ds.data[0].x = xMin; ds.data[1].x = xMax; refUpdated = true; } } }); if (refUpdated) chart.update('none'); } }
                     }
                 },
                 scales: {
                     x: {
-                        type: 'linear', position: 'bottom', min: startTime.getTime(), max: endTime.getTime(), stacked: forceNoStack ? false : this.stackedBars, offset: false,
-                        ticks: { display: !this.hideAxislabels, color: secondaryText, maxTicksLimit: 8, callback: function (value) { const d = new Date(value); const diffHours = (endTime - startTime) / (1000 * 60 * 60); if (diffHours > 48) return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); } },
+                        type: 'linear', position: 'bottom', min: startTime.getTime(), max: endTime.getTime(), stacked: forceNoStack ? false : (forceStack || this.stackedBars), offset: false,
+                        ticks: { display: !this.hideAxislabels, color: secondaryText, maxTicksLimit: 8, callback: (function (dateFormat) { return function (value) { const d = new Date(value); const scaleMin = (this && typeof this.min === 'number') ? this.min : startTime.getTime(); const scaleMax = (this && typeof this.max === 'number') ? this.max : endTime.getTime(); const rangeMs = scaleMax - scaleMin; const rangeHours = rangeMs / 3600000; const locale = dateFormat === 'mdy' ? 'en-US' : 'de-DE'; if (rangeHours > 24 * 180) { return d.toLocaleDateString(locale, { month: 'short', year: '2-digit' }); } if (rangeHours > 48) { return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }); } if (rangeHours > 6) { return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }); } if (rangeHours > 0.1) { return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }; })(this.dateFormat) },
                         grid: { color: gridColor, drawBorder: false, display: !this.hideGrid }
                     },
                     y: {
-                        type: 'linear', position: 'left', stacked: forceNoStack ? false : this.stackedBars, grace: '15%',
+                        type: 'linear', position: 'left', stacked: forceNoStack ? false : (forceStack || this.stackedBars), grace: '15%',
+                        ...(Number.isFinite(this.yMin) ? { min: this.yMin } : {}),
+                        ...(Number.isFinite(this.yMax) ? { max: this.yMax } : {}),
                         ticks: { display: !this.hideAxislabels, color: secondaryText },
                         grid: { color: gridColor, borderDash: [5, 5], display: !this.hideGrid }
                     },

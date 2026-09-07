@@ -12,6 +12,9 @@ The panel is designed so that you can intuitively click through the sidebar from
     * Type in the search field.
     * Choose a color (optional).
     * Click on `+` to add the sensor.
+    * Add several at once: tick the checkboxes in the suggestion list and click "Add selection".
+    * Add whole areas/devices: search for an area or device name to add all of its sensors at once.
+    * 🎨 Shuffle colors: assigns a harmonious color set to all sensors with one click.
 
 2.  **Determine Layout:**
     * Choose between `Combined`, `Separated (Grid)`, or `Mixed`.
@@ -27,8 +30,15 @@ The panel is designed so that you can intuitively click through the sidebar from
     * **Calendar:** (From/To) for exact analyses of past events.
 
 4.  **Refine Chart Type:**
-    * Select global `Line`, `Bar`, `Scatter`, or `Stepped`.
-    * Optionally, a reference line can be set, or the area in the Line Chart can be filled, etc.
+    * Select global `Line`, `Bar`, `Stacked Area`, `Scatter`, `Doughnut`, or `Stepped`.
+    * Add any number of **reference lines** – each with its own color and label.
+    * Optionally fill the area in the Line Chart.
+    * Optionally set a fixed **Y-axis min/max** (empty = automatic).
+    * Optionally hide the **legend** or the **min/max highlight button**.
+    * Choose the **date format** (day.month or month/day).
+    * Optionally give each sensor an **alias** (display name).
+    * *Note:* Cumulative counters (`total_increasing`, e.g. water/gas in m³ or energy in kWh) are summed as consumption, not averaged.
+    * Optionally enable **peak markers** (min/max/current), the **now line**, or **day/night shading**.
     * *Tip:* In Grid and Mixed modes, you can switch between Line and Bar for each sensor individually.
     * *Tip:* If you have defined kWh sensors in the Bar Chart View and then add a % sensor like (SoC Battery), the percentage sensor will be displayed as a Line.
 

@@ -16,6 +16,38 @@ export function getRandomColor() {
     return c;
 }
 
+/* HSL -> Hex (h in deg, s/l in %) */
+function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => {
+        const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return Math.round(255 * c).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/* Harmonious, theme-friendly palette. Hues spread via the golden angle,
+   medium saturation/lightness so colors stay readable on light AND dark themes.
+   startHue lets the caller reshuffle ("re-roll") while keeping the spacing. */
+export function generatePalette(count, startHue = 0) {
+    const colors = [];
+    const golden = 137.508;
+    for (let i = 0; i < count; i++) {
+        const hue = (startHue + i * golden) % 360;
+        const sat = 65 + (i % 2) * 10;    // 65 / 75
+        const light = 56 + (i % 3) * 4;   // 56 / 60 / 64
+        colors.push(hslToHex(hue, sat, light));
+    }
+    return colors;
+}
+
+/* Deterministic single color for the sensor at position index (stable ordering). */
+export function paletteColorAt(index) {
+    return generatePalette(index + 1)[index];
+}
+
 export function hexToRgba(hex, alpha) {
     let c;
     if (/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)) {
@@ -37,6 +69,12 @@ export function calculateEnergySum(values, isAggregated) {
         if (diff > 0) sum += diff;
     }
     return sum;
+}
+
+/* Detects cumulative meter sensors (energy, water m³, gas ...): unit Wh/kWh or state_class total/total_increasing. */
+export function isCumulativeSensor(unit, stateClass) {
+    if (stateClass === 'total_increasing' || stateClass === 'total') return true;
+    return !!(unit && (unit.includes('Wh') || unit.includes('kWh')));
 }
 
 /* --- DATA PROCESSING --- */
@@ -89,19 +127,34 @@ function aggregateToDaily(historyData, isEnergy) {
     });
 }
 
-function aggregateToHourly(historyData) {
+function aggregateToHourly(historyData, isEnergy) {
     const buckets = {};
+    const ensure = (key) => { if (!buckets[key]) buckets[key] = { sum: 0, count: 0 }; return buckets[key]; };
+    if (isEnergy) {
+        // Cumulative meters: consumption per hour = sum of positive diffs, boundary diff counted in the later hour
+        let prev = null;
+        historyData.forEach(pt => {
+            const pVal = parseState(pt.state);
+            if (isNaN(pVal)) return;
+            const date = new Date(pt.last_changed); date.setMinutes(0, 0, 0); const key = date.getTime();
+            const b = ensure(key);
+            if (prev !== null) { const d = pVal - prev; if (d > 0) b.sum += d; }
+            b.count++;
+            prev = pVal;
+        });
+        return Object.keys(buckets).sort().map(timestamp => { const t = parseInt(timestamp); return { x: t, y: buckets[timestamp].sum }; });
+    }
     historyData.forEach(pt => {
         const pVal = parseState(pt.state);
         if (isNaN(pVal)) return;
         const date = new Date(pt.last_changed); date.setMinutes(0, 0, 0); const key = date.getTime();
-        if (!buckets[key]) buckets[key] = { sum: 0, count: 0 };
-        buckets[key].sum += pVal; buckets[key].count++;
+        const b = ensure(key);
+        b.sum += pVal; b.count++;
     });
     return Object.keys(buckets).sort().map(timestamp => { const t = parseInt(timestamp); return { x: t, y: buckets[timestamp].sum / buckets[timestamp].count }; });
 }
 
-export function processData(history, type, unit, startTime = null) {
+export function processData(history, type, unit, startTime = null, cumulative = null) {
     // 1. Deduplicate History (Fix for double tooltip values)
     const uniqueHistory = [];
     const seenTimes = new Set();
@@ -114,7 +167,7 @@ export function processData(history, type, unit, startTime = null) {
     });
     history = uniqueHistory;
 
-    const isEnergy = unit && (unit.includes("Wh") || unit.includes("kWh"));
+    const isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
     let dataPoints = [];
 
     if (history.length > 1) {
@@ -129,7 +182,7 @@ export function processData(history, type, unit, startTime = null) {
 
     if (dataPoints.length === 0) {
         if (type === 'bar') {
-            dataPoints = aggregateToHourly(history);
+            dataPoints = aggregateToHourly(history, isEnergy);
         } else if (history.length > 2000) {
             const step = Math.ceil(history.length / 2000);
             dataPoints = history.filter((_, i) => i % step === 0 && !isNaN(parseState(_.state)))
@@ -360,6 +413,8 @@ export function getPanelTemplate() {
         .s-id { font-size: 11px; color: var(--secondary-text-color); margin-top: 2px; }
         .add-sensor-row { display: flex; gap: 8px; align-items: center; }
         .color-picker { width: 44px; height: 44px; padding: 2px; border-radius: 4px; border: 1px solid var(--divider-color); background: var(--primary-background-color); cursor: pointer; }
+        .btn-add-small { width:100%; padding:6px; background:transparent; border:1px dashed var(--primary-color); color:var(--primary-color); font-size:11px; font-weight:bold; text-transform:uppercase; cursor:pointer; border-radius:4px; }
+        .btn-add-small:hover { background:rgba(var(--rgb-primary-color,0,115,207),0.1); }
         .btn-icon { width: 44px; height: 44px; background: var(--btn-color); color: white; border: none; border-radius: 4px; font-size: 20px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
         .btn-icon:hover { background-color: #757575; }
         .btn-icon.grey { background-color: #757575; }
@@ -615,6 +670,7 @@ export function getPanelTemplate() {
           <div class="control-group add-sensor-row">
              <input type="color" id="color-input" class="color-picker" value="#03a9f4" title="${t('selectColor')}">
              <button id="clear-all-btn" class="btn-icon grey" title="${t('deleteList')}"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg></button>
+             <button id="reroll-colors-btn" class="btn-icon" title="${t('rerollColors')}" style="background-color:#6a4c93;font-size:16px;width:auto;padding:0 8px;">🎨</button>
              <button id="add-card-btn" class="btn-icon" title="${t('addCustomCard')}" style="font-size:12px;width:auto;padding:0 8px;">${t('addCard')}</button>
              
              <div style="margin-left:auto; display:flex; gap:5px;">
@@ -654,18 +710,24 @@ export function getPanelTemplate() {
 				<select id="chart-type">
 					<option value="line" selected>${t('line')}</option>
 					<option value="bar">${t('bar')}</option>
+					<option value="stackedArea">${t('stackedArea')}</option>
 					<option value="doughnut">${t('doughnut')}</option>
 					<option value="stepped">${t('stepped')}</option>
 					<option value="scatter">${t('scatter')}</option>
 				</select>
 			  </div>
               <div class="control-group" style="margin-top:10px;">
-                 <label>${t('threshold1')}</label>
-                 <input id="threshold-input" type="number" step="any" placeholder="z.B. 500" title="Zeigt eine rote Linie bei diesem Wert an">
+                 <label>${t('refLinesSection')}</label>
+                 <div id="ref-lines-list"></div>
+                 <button id="add-ref-line-btn" class="btn-add-small" style="margin-top:6px;">${t('addRefLineBtn')}</button>
               </div>
               <div class="control-group" style="margin-top:10px;">
-                 <label>${t('threshold2')}</label>
-                 <input id="threshold2-input" type="number" step="any" placeholder="z.B. 1000" title="Zeigt eine hellblaue Linie bei diesem Wert an">
+                 <label>${t('yMinLabel')}</label>
+                 <input id="y-min-input" type="number" step="any" placeholder="${t('autoPlaceholder')}" title="${t('yMinTitle')}">
+              </div>
+              <div class="control-group" style="margin-top:10px;">
+                 <label>${t('yMaxLabel')}</label>
+                 <input id="y-max-input" type="number" step="any" placeholder="${t('autoPlaceholder')}" title="${t('yMaxTitle')}">
               </div>
               <div class="toggle-row" id="toggle-autoscale-row" style="margin-top: 10px;">
                  <span class="toggle-label">${t('autoScale')}</span>
@@ -683,6 +745,22 @@ export function getPanelTemplate() {
               <div class="toggle-row" id="toggle-grid-row" style="margin-top: 10px;">
                  <span class="toggle-label">${t('hideGrid')}</span>
                  <input type="checkbox" class="toggle-switch" id="hide-grid-switch">
+              </div>
+              <div class="toggle-row" id="toggle-legend-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('hideLegend')}</span>
+                 <input type="checkbox" class="toggle-switch" id="hide-legend-switch">
+              </div>
+              <div class="toggle-row" id="toggle-peaks-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showPeaks')}</span>
+                 <input type="checkbox" class="toggle-switch" id="peaks-switch">
+              </div>
+              <div class="toggle-row" id="toggle-nowline-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showNowLine')}</span>
+                 <input type="checkbox" class="toggle-switch" id="nowline-switch">
+              </div>
+              <div class="toggle-row" id="toggle-daynight-row" style="margin-top: 10px;">
+                 <span class="toggle-label">${t('showDayNight')}</span>
+                 <input type="checkbox" class="toggle-switch" id="daynight-switch">
               </div>
               <div class="toggle-row" id="toggle-stacked-row" style="margin-top: 10px; display:none;"><span class="toggle-label">${t('stackedBars')}</span><input type="checkbox" class="toggle-switch" id="stacked-switch"></div>
 		  </div>
@@ -711,6 +789,13 @@ export function getPanelTemplate() {
 				 <div><label>${t('to')}</label><input type="datetime-local" id="date-end"></div>
 			  </div>
 			  <button id="reset-zoom-btn">${t('resetZoom')}</button>
+			  <div class="control-group" style="margin-top:15px;">
+				 <label>${t('dateFormat')}</label>
+				 <select id="date-format-select">
+					<option value="dmy">${t('dateFormatDMY')}</option>
+					<option value="mdy">${t('dateFormatMDY')}</option>
+				 </select>
+			  </div>
 		  </div>	  
           <div class="saved-views-section"><label>${t('savedViews')}</label><div id="saved-views-container"></div></div>
           <div class="error-msg" id="error-msg"></div>

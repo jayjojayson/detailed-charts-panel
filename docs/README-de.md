@@ -35,7 +35,17 @@ Wenn euch das Panel gefällt, würde ich mich sehr über eine Sternebewertung �
     - *Combined:* Alles in einem Chart.
     - *Grid:* 1 bis 4 Spalten nebeneinander.
     - *Mixed:* Übersicht oben, Details unten.
-- **🔴 Thresholds:** Setze Warnlinie (z.B. bei 600W) als visuelle Referenz.
+- **🔴 Referenzlinien:** Beliebig viele Referenzlinien mit eigener Farbe und Bezeichnung.
+- **📐 Y-Achse manuell:** Optional festes Min/Max der Y-Achse (leer = Auto-Skalierung).
+- **🏷️ Sensor-Alias:** Vergib je Sensor einen eigenen Anzeigenamen.
+- **🧱 Stacked Area:** Zusätzlicher gestapelter Flächen-Diagrammtyp.
+- **🧮 Zähler-Sensoren (m³, kWh):** Kumulative Zähler (`total_increasing`, z.B. Wasser/Gas in m³ oder Energie) werden als Verbrauch (Summe der Zuwächse) aggregiert statt gemittelt.
+- **🔧 Anzeige-Optionen:** Legende ausblenden, Min/Max-Hervorhebungs-Button ausblenden und Datumsformat wählen (Tag.Monat / Monat/Tag).
+- **📊 Live-Range-Statistiken:** Statistiken werden beim Zoomen/Pannen für den sichtbaren Bereich neu berechnet.
+- **🎨 Farbpalette:** Ein Klick vergibt einen harmonischen, theme-tauglichen Farbsatz ("Farben neu würfeln").
+- **➕ Mehrfachauswahl & Bereiche/Geräte:** Mehrere Sensoren auf einmal wählen oder alle Sensoren eines Bereichs/Geräts hinzufügen.
+- **📍 Peak-Marker:** Optionale Min-/Max-/Aktuell-Marker mit Beschriftung direkt an der Linie.
+- **🕒 Jetzt-Linie & Tag/Nacht:** Optionale „Jetzt"-Linie und Tag/Nacht-Hintergrundschattierung für bessere Lesbarkeit.
 - **💾 Duales Speichern:** Speichere Ansichten lokal im Browser oder global in einer Datei.
 - **📈 Live-Statistiken:** Min / Max / Durchschnitt / Summe / Aktuell – intelligent berechnet.
 - **🏗️ Drag & Drop:** Ordne Charts im Grid-Modus einfach per Maus neu an.

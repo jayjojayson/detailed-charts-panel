@@ -13,3 +13,6 @@
 * Examples
   * [Views Panel/Card](/en_docs/examples.md)
 
+* Changelog
+  * [Changelog](/changelog.md)
+

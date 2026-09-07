@@ -1,12 +1,14 @@
 /* detailed-charts-panel.js */
 console.log(
-    "%c📉️ DetailedChartsPanel: v_2.6 ready",
+    "%c📉️ DetailedChartsPanel: v_2.7 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
 import {
     cleanName,
     getRandomColor,
+    generatePalette,
+    paletteColorAt,
     getPanelTemplate
 } from './detailed-charts-panel-function.js';
 
@@ -86,12 +88,19 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.showDonutSidebar = config.showDonutSidebar || false;
         this.zoomLevel = config.zoomLevel || 1.0;
         this.autoScale = config.autoScale || false;
-        this.thresholdValue = config.threshold || "";
-        this.thresholdValue2 = config.threshold2 || "";
+        this.thresholds = this._migrateThresholds(config);
         this.chartTension = config.chartTension !== undefined ? config.chartTension : 4;
+        this.yMin = this._parseAxisLimit(config.yMin);
+        this.yMax = this._parseAxisLimit(config.yMax);
 
         this.hideAxislabels = config.hideAxislabels || false;
         this.hideGrid = config.hideGrid || false;
+        this.hideLegend = config.hideLegend || false;
+        this.hideMonoBtn = config.hideMonoBtn || false;
+        this.dateFormat = config.dateFormat || 'dmy';
+        this.showPeaks = config.showPeaks || false;
+        this.showNowLine = config.showNowLine || false;
+        this.showDayNight = config.showDayNight || false;
 
         if (this.content) {
             const updateInput = (id, val, isCheck = false) => {
@@ -115,6 +124,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
             updateInput('#hide-axis-switch', this.hideAxislabels, true);
             updateInput('#hide-grid-switch', this.hideGrid, true);
+            updateInput('#hide-legend-switch', this.hideLegend, true);
+            updateInput('#date-format-select', this.dateFormat);
+            updateInput('#peaks-switch', this.showPeaks, true);
+            updateInput('#nowline-switch', this.showNowLine, true);
+            updateInput('#daynight-switch', this.showDayNight, true);
 
             const gridDisp = this.content.querySelector('#grid-value-display');
             if (gridDisp) gridDisp.textContent = this.gridColumns;
@@ -131,8 +145,9 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             updateInput('#donut-switch', this.showDonutSidebar, true);
             updateInput('#autoscale-switch', this.autoScale, true);
             updateInput('#compare-year-switch', this.compareYear, true);
-            updateInput('#threshold-input', this.thresholdValue);
-            updateInput('#threshold2-input', this.thresholdValue2);
+            this.renderRefLinesUI();
+            updateInput('#y-min-input', this.yMin === undefined ? '' : this.yMin);
+            updateInput('#y-max-input', this.yMax === undefined ? '' : this.yMax);
 
             this.updateSliderVisibility();
             this.updateStackedVisibility();
@@ -142,10 +157,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
             // FIX: If config changed (Editor), sync to localStorage to prevent loadSettings from reverting it
             if (oldConfig) {
-                const keysToCheck = ['layoutMode', 'chartType', 'timeMode', 'timeSelect', 'fillArea', 'stackedBars', 'gridColumns', 'zoomLevel', 'showStats', 'showDonutSidebar', 'autoScale', 'compareYear', 'threshold', 'threshold2', 'hideAxislabels', 'hideGrid'];
+                const keysToCheck = ['layoutMode', 'chartType', 'timeMode', 'timeSelect', 'fillArea', 'stackedBars', 'gridColumns', 'zoomLevel', 'showStats', 'showDonutSidebar', 'autoScale', 'compareYear', 'hideAxislabels', 'hideGrid', 'hideLegend', 'hideMonoBtn', 'dateFormat', 'yMin', 'yMax', 'showPeaks', 'showNowLine', 'showDayNight'];
                 let hasChanged = keysToCheck.some(k => oldConfig[k] !== config[k]);
                 if (!hasChanged) {
                     if (JSON.stringify(config.sensors) !== JSON.stringify(oldConfig.sensors)) hasChanged = true;
+                    if (JSON.stringify(config.thresholds) !== JSON.stringify(oldConfig.thresholds)) hasChanged = true;
                 }
                 if (hasChanged) {
                     this.saveSettings();
@@ -173,6 +189,87 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     getCardSize() {
         return 4;
+    }
+
+    _parseAxisLimit(v) {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : undefined;
+    }
+
+    _migrateThresholds(config) {
+        if (config.thresholds) return config.thresholds;
+        const result = [];
+        if (config.threshold !== undefined && config.threshold !== '') {
+            result.push({ value: config.threshold, alias: config.thresholdAlias1 || '', color: '#f44336' });
+        }
+        if (config.threshold2 !== undefined && config.threshold2 !== '') {
+            result.push({ value: config.threshold2, alias: config.thresholdAlias2 || '', color: '#03a9f4' });
+        }
+        return result;
+    }
+
+    renderRefLinesUI() {
+        const list = this.content.querySelector('#ref-lines-list');
+        if (!list) return;
+        list.innerHTML = '';
+        (this.thresholds || []).forEach((ref, i) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;';
+
+            const colWrap = document.createElement('div');
+            colWrap.style.cssText = `width:28px;height:28px;border-radius:50%;background:${ref.color || '#f44336'};flex-shrink:0;cursor:pointer;overflow:hidden;`;
+            const colInp = document.createElement('input');
+            colInp.type = 'color';
+            colInp.value = ref.color || '#f44336';
+            colInp.style.cssText = 'opacity:0;width:100%;height:100%;cursor:pointer;';
+            colInp.addEventListener('input', (e) => { colWrap.style.background = e.target.value; });
+            colInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], color: e.target.value };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            colWrap.appendChild(colInp);
+            row.appendChild(colWrap);
+
+            const valInp = document.createElement('input');
+            valInp.type = 'number';
+            valInp.step = 'any';
+            valInp.value = ref.value !== undefined ? ref.value : '';
+            valInp.placeholder = t('refLineValue');
+            valInp.style.cssText = 'flex:1;min-width:0;width:auto;';
+            valInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], value: e.target.value };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(valInp);
+
+            const aliasInp = document.createElement('input');
+            aliasInp.type = 'text';
+            aliasInp.value = ref.alias || '';
+            aliasInp.placeholder = t('refLineAlias');
+            aliasInp.style.cssText = 'flex:1;min-width:0;width:auto;';
+            aliasInp.addEventListener('change', (e) => {
+                this.thresholds[i] = { ...this.thresholds[i], alias: e.target.value.trim() };
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(aliasInp);
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--error-color,#f44336);font-size:16px;padding:0 4px;flex-shrink:0;';
+            delBtn.addEventListener('click', () => {
+                this.thresholds = this.thresholds.filter((_, idx) => idx !== i);
+                this.renderRefLinesUI();
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+            row.appendChild(delBtn);
+
+            list.appendChild(row);
+        });
     }
 
     set hass(hass) {
@@ -252,6 +349,8 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         });
 
         this.content.querySelector('#clear-all-btn').addEventListener('click', () => this.clearAllSensors());
+        const rerollBtn = this.content.querySelector('#reroll-colors-btn');
+        if (rerollBtn) rerollBtn.addEventListener('click', () => this.randomizeColors());
         this.content.querySelector('#save-view-btn').addEventListener('click', () => this.saveCurrentView());
 
         this.content.querySelector('#reset-zoom-btn').addEventListener('click', () => this.resetZoomAll());
@@ -312,7 +411,8 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             '#fill-switch', '#layout-select', '#stacked-switch',
             '#fill-switch', '#layout-select', '#stacked-switch',
             '#stats-switch', '#donut-switch', '#autoscale-switch', '#compare-year-switch',
-            '#hide-axis-switch', '#hide-grid-switch'
+            '#hide-axis-switch', '#hide-grid-switch', '#hide-legend-switch', '#date-format-select',
+            '#peaks-switch', '#nowline-switch', '#daynight-switch'
         ];
         inputs.forEach(id => {
             const el = this.content.querySelector(id);
@@ -348,6 +448,11 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 }
                 if (id === '#hide-axis-switch') this.hideAxislabels = e.target.checked;
                 if (id === '#hide-grid-switch') this.hideGrid = e.target.checked;
+                if (id === '#hide-legend-switch') this.hideLegend = e.target.checked;
+                if (id === '#date-format-select') this.dateFormat = e.target.value;
+                if (id === '#peaks-switch') this.showPeaks = e.target.checked;
+                if (id === '#nowline-switch') this.showNowLine = e.target.checked;
+                if (id === '#daynight-switch') this.showDayNight = e.target.checked;
 
                 this.updateStackedVisibility();
                 if (!this._config) this.saveSettings();
@@ -358,17 +463,30 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             });
         });
 
-        const threshInput = this.content.querySelector('#threshold-input');
-        threshInput.addEventListener('change', (e) => {
-            this.thresholdValue = e.target.value;
-            if (!this._config) this.saveSettings();
-            if (this._sensorDataCache.length > 0) this.updateChartFromCache();
-        });
+        const addRefBtn = this.content.querySelector('#add-ref-line-btn');
+        if (addRefBtn) {
+            addRefBtn.addEventListener('click', () => {
+                this.thresholds = [...(this.thresholds || []), { value: '', alias: '', color: '#f44336' }];
+                this.renderRefLinesUI();
+                if (!this._config) this.saveSettings();
+            });
+        }
 
-        const threshInput2 = this.content.querySelector('#threshold2-input');
-        if (threshInput2) {
-            threshInput2.addEventListener('change', (e) => {
-                this.thresholdValue2 = e.target.value;
+        const yMinInput = this.content.querySelector('#y-min-input');
+        if (yMinInput) {
+            yMinInput.addEventListener('change', (e) => {
+                const v = e.target.value;
+                this.yMin = v === '' ? undefined : Number(v);
+                if (!this._config) this.saveSettings();
+                if (this._sensorDataCache.length > 0) this.updateChartFromCache();
+            });
+        }
+
+        const yMaxInput = this.content.querySelector('#y-max-input');
+        if (yMaxInput) {
+            yMaxInput.addEventListener('change', (e) => {
+                const v = e.target.value;
+                this.yMax = v === '' ? undefined : Number(v);
                 if (!this._config) this.saveSettings();
                 if (this._sensorDataCache.length > 0) this.updateChartFromCache();
             });
@@ -511,9 +629,23 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         yaml += `compareYear: ${this.compareYear}\n`;
         yaml += `hideAxislabels: ${this.hideAxislabels}\n`;
         yaml += `hideGrid: ${this.hideGrid}\n`;
+        yaml += `hideLegend: ${this.hideLegend}\n`;
+        yaml += `hideMonoBtn: ${this.hideMonoBtn}\n`;
+        yaml += `dateFormat: ${this.dateFormat}\n`;
+        yaml += `showPeaks: ${this.showPeaks}\n`;
+        yaml += `showNowLine: ${this.showNowLine}\n`;
+        yaml += `showDayNight: ${this.showDayNight}\n`;
         yaml += `chartTension: ${this.chartTension}\n`;
-        if (this.thresholdValue) yaml += `threshold: ${this.thresholdValue}\n`;
-        if (this.thresholdValue2) yaml += `threshold2: ${this.thresholdValue2}\n`;
+        if (this.thresholds && this.thresholds.length > 0) {
+            yaml += `thresholds:\n`;
+            this.thresholds.forEach(r => {
+                yaml += `  - value: ${r.value}\n`;
+                yaml += `    color: "${r.color}"\n`;
+                if (r.alias) yaml += `    alias: "${r.alias}"\n`;
+            });
+        }
+        if (this.yMin !== undefined) yaml += `yMin: ${this.yMin}\n`;
+        if (this.yMax !== undefined) yaml += `yMax: ${this.yMax}\n`;
         if (this.gridColumns > 1) yaml += `gridColumns: ${this.gridColumns}\n`;
 
         yaml += `sensors:\n`;
@@ -539,10 +671,17 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             zoomLevel: this.zoomLevel,
             autoScale: this.autoScale,
             compareYear: this.compareYear,
-            threshold: this.thresholdValue,
-            threshold2: this.thresholdValue2,
+            thresholds: this.thresholds,
+            yMin: this.yMin,
+            yMax: this.yMax,
             hideAxislabels: this.hideAxislabels,
             hideGrid: this.hideGrid,
+            hideLegend: this.hideLegend,
+            hideMonoBtn: this.hideMonoBtn,
+            dateFormat: this.dateFormat,
+            showPeaks: this.showPeaks,
+            showNowLine: this.showNowLine,
+            showDayNight: this.showDayNight,
             chartTension: this.chartTension,
             sensors: this.selectedSensors
         };
@@ -570,32 +709,152 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     handleSearch(query) {
         const list = this.content.querySelector('#suggestions');
-        if (!this._allSensors || this._allSensors.length === 0) return;
-        const q = query.toLowerCase();
+        if (!this._allSensors || this._allSensors.length === 0) { list.style.display = 'none'; return; }
+        const q = (query || '').toLowerCase();
+        const hass = this._hass;
+        list.innerHTML = '';
+        if (!this._searchSelection) this._searchSelection = new Set();
+
+        // --- Areas & Devices (only when the HA registry is available and something is typed) ---
+        let groupRows = 0;
+        if (q && hass && hass.areas && hass.devices) {
+            Object.values(hass.areas).forEach(area => {
+                if (groupRows >= 8) return;
+                const nm = (area.name || '').toLowerCase();
+                if (!nm.includes(q)) return;
+                const ids = this._areaSensors(area.area_id);
+                if (!ids.length) return;
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerHTML = `<div class="s-name">🗺️ ${area.name} <span style="opacity:.6;font-weight:400;">(${t('area')}, ${ids.length})</span></div><div class="s-id">${t('addAllInGroup')}</div>`;
+                div.onclick = () => { list.style.display = 'none'; this.content.querySelector('#sensor-input').value = ''; this.addMultipleSensors(ids); };
+                list.appendChild(div); groupRows++;
+            });
+            Object.values(hass.devices).forEach(dev => {
+                if (groupRows >= 12) return;
+                const label = dev.name_by_user || dev.name || '';
+                if (!label.toLowerCase().includes(q)) return;
+                const ids = this._deviceSensors(dev.id);
+                if (!ids.length) return;
+                const div = document.createElement('div');
+                div.className = 'suggestion-item';
+                div.innerHTML = `<div class="s-name">🔧 ${label} <span style="opacity:.6;font-weight:400;">(${t('device')}, ${ids.length})</span></div><div class="s-id">${t('addAllInGroup')}</div>`;
+                div.onclick = () => { list.style.display = 'none'; this.content.querySelector('#sensor-input').value = ''; this.addMultipleSensors(ids); };
+                list.appendChild(div); groupRows++;
+            });
+        }
+
+        // --- Entities (with multi-select checkboxes) ---
         const matches = this._allSensors.filter(id => {
+            if (this.selectedSensors.some(sel => sel.entityId === id)) return false;
             if (id.toLowerCase().includes(q)) return true;
-            const state = this._hass.states[id];
+            const state = hass.states[id];
             if (state && state.attributes.friendly_name && state.attributes.friendly_name.toLowerCase().includes(q)) return true;
             return false;
         }).slice(0, 50);
 
-        if (matches.length === 0) { list.style.display = 'none'; return; }
-        list.innerHTML = '';
         matches.forEach(id => {
+            const state = hass.states[id];
+            const friendly = state && state.attributes.friendly_name ? state.attributes.friendly_name : cleanName(id);
             const div = document.createElement('div');
             div.className = 'suggestion-item';
-            const name = cleanName(id);
-            const state = this._hass.states[id];
-            const friendly = state && state.attributes.friendly_name ? state.attributes.friendly_name : name;
-            div.innerHTML = `<div class="s-name">${friendly}</div><div class="s-id">${id}</div>`;
-            div.onclick = () => {
-                this.content.querySelector('#sensor-input').value = id;
-                list.style.display = 'none';
-                this.addSensor();
-            };
+            div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.style.flexShrink = '0'; cb.style.width = '18px'; cb.style.height = '18px'; cb.style.cursor = 'pointer';
+            cb.style.appearance = 'auto'; cb.style.webkitAppearance = 'auto'; cb.style.accentColor = 'var(--accent-color, #03a9f4)'; cb.style.margin = '0';
+            cb.checked = this._searchSelection.has(id);
+            cb.onclick = (e) => { e.stopPropagation(); if (cb.checked) this._searchSelection.add(id); else this._searchSelection.delete(id); this._updateSearchFooter(); };
+            const txt = document.createElement('div');
+            txt.style.flex = '1'; txt.style.minWidth = '0'; txt.style.overflow = 'hidden'; txt.style.cursor = 'pointer';
+            txt.innerHTML = `<div class="s-name">${friendly}</div><div class="s-id">${id}</div>`;
+            txt.onclick = () => { list.style.display = 'none'; this._searchSelection.clear(); this.content.querySelector('#sensor-input').value = id; this.addSensor(); };
+            div.appendChild(cb); div.appendChild(txt);
             list.appendChild(div);
         });
+
+        if (list.children.length === 0) { list.style.display = 'none'; return; }
+
+        // --- Footer: add all checked entities at once ---
+        const footer = document.createElement('div');
+        footer.style.cssText = 'position:sticky;bottom:0;background:var(--secondary-background-color,#2c2c2c);border-top:1px solid var(--divider-color);padding:8px;';
+        footer.innerHTML = `<button id="add-selected-btn" class="btn-add-small" style="border-style:solid;">${t('addSelected')} (${this._searchSelection.size})</button>`;
+        list.appendChild(footer);
+        const addSelBtn = footer.querySelector('#add-selected-btn');
+        addSelBtn.onclick = (e) => {
+            e.stopPropagation();
+            const ids = Array.from(this._searchSelection);
+            this._searchSelection.clear();
+            list.style.display = 'none';
+            this.content.querySelector('#sensor-input').value = '';
+            if (ids.length) this.addMultipleSensors(ids);
+        };
+
         list.style.display = 'block';
+    }
+
+    _updateSearchFooter() {
+        const btn = this.content.querySelector('#add-selected-btn');
+        if (btn) btn.textContent = `${t('addSelected')} (${this._searchSelection ? this._searchSelection.size : 0})`;
+    }
+
+    _isTrackableEntity(eid) {
+        return eid && (eid.startsWith('sensor.') || eid.startsWith('binary_sensor.') || eid.startsWith('input_number.'));
+    }
+
+    _areaSensors(areaId) {
+        const hass = this._hass;
+        if (!hass || !hass.entities) return [];
+        const out = [];
+        Object.values(hass.entities).forEach(ent => {
+            const eid = ent.entity_id;
+            if (!this._isTrackableEntity(eid)) return;
+            if (ent.hidden || ent.disabled_by) return;
+            let a = ent.area_id;
+            if (!a && ent.device_id && hass.devices && hass.devices[ent.device_id]) a = hass.devices[ent.device_id].area_id;
+            if (a === areaId && hass.states[eid]) out.push(eid);
+        });
+        return out;
+    }
+
+    _deviceSensors(deviceId) {
+        const hass = this._hass;
+        if (!hass || !hass.entities) return [];
+        const out = [];
+        Object.values(hass.entities).forEach(ent => {
+            const eid = ent.entity_id;
+            if (ent.device_id !== deviceId) return;
+            if (!this._isTrackableEntity(eid)) return;
+            if (ent.hidden || ent.disabled_by) return;
+            if (hass.states[eid]) out.push(eid);
+        });
+        return out;
+    }
+
+    async addMultipleSensors(ids) {
+        let added = 0;
+        (ids || []).forEach((id) => {
+            if (this.selectedSensors.some(sel => sel.entityId === id)) return;
+            const color = paletteColorAt(this.selectedSensors.length);
+            this.selectedSensors.push({ entityId: id, color });
+            added++;
+        });
+        if (!added) return;
+        const ci = this.content.querySelector('#color-input');
+        if (ci) ci.value = paletteColorAt(this.selectedSensors.length);
+        this.renderSensorListUI();
+        if (!this._config) this.saveSettings();
+        this.loadHistory();
+    }
+
+    randomizeColors() {
+        const real = this.selectedSensors.filter(sel => !sel.isCard);
+        if (!real.length) return;
+        const palette = generatePalette(real.length, Math.floor(Math.random() * 360));
+        let i = 0;
+        this.selectedSensors.forEach(sel => { if (sel.isCard) return; sel.color = palette[i++]; });
+        if (!this._config) this.saveSettings();
+        this.renderSensorListUI();
+        if (this._sensorDataCache.length > 0) this.updateChartFromCache();
     }
 
     saveCurrentView() {
@@ -636,10 +895,17 @@ class DetailedChartsPanel extends DetailedChartsLogic {
             zoomLevel: this.zoomLevel,
             autoScale: this.autoScale,
             compareYear: this.compareYear,
-            threshold: this.thresholdValue,
-            threshold2: this.thresholdValue2,
+            thresholds: this.thresholds,
+            yMin: this.yMin,
+            yMax: this.yMax,
             hideAxislabels: this.hideAxislabels,
             hideGrid: this.hideGrid,
+            hideLegend: this.hideLegend,
+            hideMonoBtn: this.hideMonoBtn,
+            dateFormat: this.dateFormat,
+            showPeaks: this.showPeaks,
+            showNowLine: this.showNowLine,
+            showDayNight: this.showDayNight,
             chartTension: this.chartTension
         };
         this.savedViews.push(viewConfig);
@@ -676,11 +942,18 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.showDonutSidebar = config.showDonutSidebar || false;
         this.zoomLevel = config.zoomLevel || 1.0;
         this.autoScale = config.autoScale || false;
-        this.thresholdValue = config.threshold || "";
-        this.thresholdValue2 = config.threshold2 || "";
+        this.thresholds = this._migrateThresholds(config);
         this.chartTension = config.chartTension !== undefined ? config.chartTension : 4;
+        this.yMin = this._parseAxisLimit(config.yMin);
+        this.yMax = this._parseAxisLimit(config.yMax);
         this.hideAxislabels = config.hideAxislabels || false;
         this.hideGrid = config.hideGrid || false;
+        this.hideLegend = config.hideLegend || false;
+        this.hideMonoBtn = config.hideMonoBtn || false;
+        this.dateFormat = config.dateFormat || 'dmy';
+        this.showPeaks = config.showPeaks || false;
+        this.showNowLine = config.showNowLine || false;
+        this.showDayNight = config.showDayNight || false;
 
         this.content.querySelector('#chart-type').value = config.chartType || 'line';
         this.content.querySelector('#time-select').value = config.timeSelect || '24';
@@ -703,12 +976,22 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         this.content.querySelector('#zoom-slider').value = this.zoomLevel;
         this.content.querySelector('#zoom-value-display').textContent = Math.round(this.zoomLevel * 100) + '%';
 
-        this.content.querySelector('#threshold-input').value = this.thresholdValue;
-        if (this.content.querySelector('#threshold2-input')) this.content.querySelector('#threshold2-input').value = this.thresholdValue2;
+        this.renderRefLinesUI();
+        const yMinEl = this.content.querySelector('#y-min-input');
+        if (yMinEl) yMinEl.value = this.yMin === undefined ? '' : this.yMin;
+        const yMaxEl = this.content.querySelector('#y-max-input');
+        if (yMaxEl) yMaxEl.value = this.yMax === undefined ? '' : this.yMax;
         this.content.querySelector('#autoscale-switch').checked = this.autoScale;
         this.content.querySelector('#compare-year-switch').checked = this.compareYear;
         this.content.querySelector('#hide-axis-switch').checked = this.hideAxislabels;
         this.content.querySelector('#hide-grid-switch').checked = this.hideGrid;
+        const legendSw = this.content.querySelector('#hide-legend-switch');
+        if (legendSw) legendSw.checked = this.hideLegend;
+        const dfSel = this.content.querySelector('#date-format-select');
+        if (dfSel) dfSel.value = this.dateFormat;
+        const pkSw = this.content.querySelector('#peaks-switch'); if (pkSw) pkSw.checked = this.showPeaks;
+        const nlSw = this.content.querySelector('#nowline-switch'); if (nlSw) nlSw.checked = this.showNowLine;
+        const dnSw = this.content.querySelector('#daynight-switch'); if (dnSw) dnSw.checked = this.showDayNight;
 
         this.updateSliderVisibility();
         this.updateStackedVisibility();
@@ -762,7 +1045,7 @@ class DetailedChartsPanel extends DetailedChartsLogic {
 
     updateStatsToggleVisibility() {
         const statsRow = this.content.querySelector('#toggle-stats-row');
-        if (this.layoutMode !== 'split') { statsRow.style.display = 'flex'; } else { statsRow.style.display = 'none'; }
+        if (statsRow) statsRow.style.display = 'flex';
     }
 
     updateDonutToggleVisibility() {
@@ -787,15 +1070,20 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 showStats: this.showStats,
                 showDonutSidebar: this.showDonutSidebar,
                 zoomLevel: this.zoomLevel,
-                threshold: this.thresholdValue,
-                threshold2: this.thresholdValue2,
+                thresholds: this.thresholds,
                 autoScale: this.autoScale,
                 compareYear: this.compareYear,
                 hideAxislabels: this.hideAxislabels,
                 hideGrid: this.hideGrid,
-                hideAxislabels: this.hideAxislabels,
-                hideGrid: this.hideGrid,
+                hideLegend: this.hideLegend,
+                hideMonoBtn: this.hideMonoBtn,
+                dateFormat: this.dateFormat,
+                showPeaks: this.showPeaks,
+                showNowLine: this.showNowLine,
+                showDayNight: this.showDayNight,
                 chartTension: this.chartTension,
+                yMin: this.yMin,
+                yMax: this.yMax,
                 sidebarCollapsed: this.sidebarCollapsed
             };
             const singleContainer = this.content.querySelector('#chart-container-single');
@@ -856,23 +1144,40 @@ class DetailedChartsPanel extends DetailedChartsLogic {
                 this.content.querySelector('#zoom-slider').value = this.zoomLevel;
                 this.content.querySelector('#zoom-value-display').textContent = Math.round(this.zoomLevel * 100) + '%';
             }
-            if (settings.threshold) {
-                this.thresholdValue = settings.threshold;
-                this.content.querySelector('#threshold-input').value = settings.threshold;
-            }
-            if (settings.threshold2) {
-                this.thresholdValue2 = settings.threshold2;
-                if (this.content.querySelector('#threshold2-input')) this.content.querySelector('#threshold2-input').value = settings.threshold2;
-            }
+            this.thresholds = this._migrateThresholds(settings);
+            this.renderRefLinesUI();
             if (settings.autoScale !== undefined) {
                 this.autoScale = settings.autoScale;
                 this.content.querySelector('#autoscale-switch').checked = settings.autoScale;
             }
+            if (settings.yMin !== undefined && settings.yMin !== null && settings.yMin !== '') {
+                this.yMin = Number(settings.yMin);
+                const el = this.content.querySelector('#y-min-input');
+                if (el) el.value = this.yMin;
+            }
+            if (settings.yMax !== undefined && settings.yMax !== null && settings.yMax !== '') {
+                this.yMax = Number(settings.yMax);
+                const el = this.content.querySelector('#y-max-input');
+                if (el) el.value = this.yMax;
+            }
             this.chartTension = settings.chartTension !== undefined ? settings.chartTension : 4;
 
             if (settings.hideAxislabels !== undefined) { this.hideAxislabels = settings.hideAxislabels; this.content.querySelector('#hide-axis-switch').checked = settings.hideAxislabels; }
-            if (settings.hideAxislabels !== undefined) { this.hideAxislabels = settings.hideAxislabels; this.content.querySelector('#hide-axis-switch').checked = settings.hideAxislabels; }
             if (settings.hideGrid !== undefined) { this.hideGrid = settings.hideGrid; this.content.querySelector('#hide-grid-switch').checked = settings.hideGrid; }
+            if (settings.hideLegend !== undefined) {
+                this.hideLegend = settings.hideLegend;
+                const el = this.content.querySelector('#hide-legend-switch');
+                if (el) el.checked = settings.hideLegend;
+            }
+            if (settings.hideMonoBtn !== undefined) this.hideMonoBtn = settings.hideMonoBtn;
+            if (settings.dateFormat) {
+                this.dateFormat = settings.dateFormat;
+                const dfSel = this.content.querySelector('#date-format-select');
+                if (dfSel) dfSel.value = settings.dateFormat;
+            }
+            if (settings.showPeaks !== undefined) { this.showPeaks = settings.showPeaks; const el = this.content.querySelector('#peaks-switch'); if (el) el.checked = settings.showPeaks; }
+            if (settings.showNowLine !== undefined) { this.showNowLine = settings.showNowLine; const el = this.content.querySelector('#nowline-switch'); if (el) el.checked = settings.showNowLine; }
+            if (settings.showDayNight !== undefined) { this.showDayNight = settings.showDayNight; const el = this.content.querySelector('#daynight-switch'); if (el) el.checked = settings.showDayNight; }
             if (settings.sidebarCollapsed !== undefined) {
                 this.sidebarCollapsed = settings.sidebarCollapsed;
                 this._applySidebarState();
@@ -901,7 +1206,7 @@ class DetailedChartsPanel extends DetailedChartsLogic {
         if (this.selectedSensors.some(s => s.entityId === entityId)) { alert(t('sensorAlreadyInList')); return; }
         this.selectedSensors.push({ entityId, color });
         input.value = '';
-        this.content.querySelector('#color-input').value = getRandomColor();
+        this.content.querySelector('#color-input').value = paletteColorAt(this.selectedSensors.length);
         this.renderSensorListUI();
         if (!this._config) this.saveSettings();
         if (this._globalStartTime && this._globalEndTime) {

@@ -2,3 +2,8 @@
 .idea/
 
 /node_modules
+
+# Local tooling / OS files (not part of the project)
+plan.md
+.claude/
+.DS_Store

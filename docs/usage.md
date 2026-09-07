@@ -12,6 +12,9 @@ Das Panel ist so konzipiert, dass du dich intuitiv von oben nach unten durch die
     * Tippe in das Suchfeld.
     * Wähle eine Farbe (optional).
     * Klicke auf `+`, um den Sensor hinzuzufügen.
+    * Mehrere gleichzeitig: setze in der Vorschlagsliste Häkchen und klicke „Auswahl hinzufügen".
+    * Ganze Bereiche/Geräte: suche nach einem Bereichs- oder Gerätenamen und füge alle zugehörigen Sensoren auf einmal hinzu.
+    * 🎨 Farben neu würfeln: vergibt per Klick einen harmonischen Farbsatz für alle Sensoren.
 
 2.  **Layout bestimmen:**
     * Wähle zwischen `Kombiniert`, `Getrennt (Grid)` oder `Mixed`.
@@ -27,8 +30,15 @@ Das Panel ist so konzipiert, dass du dich intuitiv von oben nach unten durch die
     * **Kalender:** (Von/Bis) für exakte Analysen vergangener Ereignisse.
 
 4.  **Chart-Typ verfeinern:**
-    * Wähle global `Line`, `Bar`, `Scatter` oder `Stepped`.
-	* Optional können eine Referenzlinie gesetzt oder die Fläche in Line Chart gefüllt werden usw.
+    * Wähle global `Line`, `Bar`, `Stacked Area`, `Scatter`, `Doughnut` oder `Stepped`.
+	* Setze beliebig viele **Referenzlinien** – jede mit eigener Farbe und Bezeichnung.
+	* Optional die Fläche im Line Chart füllen.
+	* Lege optional ein festes **Min/Max der Y-Achse** fest (leer = automatisch).
+	* Blende bei Bedarf die **Legende** oder den **Min/Max-Hervorhebungs-Button** aus.
+	* Wähle das **Datumsformat** (Tag.Monat oder Monat/Tag).
+	* Vergib je Sensor optional einen **Alias** (Anzeigename).
+	* *Hinweis:* Kumulative Zähler (`total_increasing`, z.B. Wasser/Gas in m³ oder Energie in kWh) werden als Verbrauch summiert, nicht gemittelt.
+	* Aktiviere optional **Peak-Marker** (Min/Max/Aktuell), die **Jetzt-Linie** oder die **Tag/Nacht-Schattierung**.
     * *Tipp:* Im Grid und Mixed-Modus kannst du für jeden Sensor einzeln zwischen Line und Bar umschalten.
 	* *Tipp:* Wenn du im Bar Chart View kwh Sensoren definiert hast und dann einen % Sensor wie (SoC Battery) hinzufügst, dann wird der Prozenztsensor als Line dargestellt.
 

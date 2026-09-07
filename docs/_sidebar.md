@@ -13,3 +13,6 @@
 * Beispiele
   * [Ansichten Panel/Card](examples.md)
 
+* Changelog
+  * [Changelog](changelog.md)
+
