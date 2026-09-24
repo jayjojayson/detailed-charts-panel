@@ -58,6 +58,7 @@ const en = {
     last12Hours: "Last 12 Hours",
     last24Hours: "Last 24 Hours",
     last48Hours: "Last 48 Hours",
+    last3Days: "Last 3 Days",
     last7Days: "Last 7 Days",
     last30Days: "Last 30 Days (Month)",
     last3Months: "Last 3 Months",
@@ -212,6 +213,7 @@ const de = {
     last12Hours: "Letzte 12 Stunden",
     last24Hours: "Letzte 24 Stunden",
     last48Hours: "Letzte 48 Stunden",
+    last3Days: "Letzte 3 Tage",
     last7Days: "Letzte 7 Tage",
     last30Days: "Letzte 30 Tage (Monat)",
     last3Months: "Letzte 3 Monate",
@@ -334,6 +336,8 @@ function t(key) {
 /* detailed-charts-panel-function.js */
 
 
+const PANEL_VERSION = 'v2.8';
+
 /* --- HELPER FUNCTIONS --- */
 
 function cleanName(name) {
@@ -402,6 +406,25 @@ function isCumulativeSensor(unit, stateClass) {
     return !!(unit && (unit.includes('Wh') || unit.includes('kWh')));
 }
 
+/* Heuristic: does this numeric series behave like an ever-increasing counter (rises, then
+   resets back to its baseline)? Used to aggregate such sensors as consumption in bar charts,
+   even when they carry no state_class/kWh unit (e.g. an input_number helper that counts up).
+   A measurement sensor (temperature, power) keeps dipping mid-range and is therefore NOT matched. */
+function looksLikeCounter(values) {
+    if (!values || values.length < 5) return false;
+    let min = values[0], max = values[0];
+    for (let i = 1; i < values.length; i++) { if (values[i] < min) min = values[i]; if (values[i] > max) max = values[i]; }
+    if (!(max > min)) return false;
+    const resetFloor = min + 0.15 * (max - min);
+    let ups = 0, downs = 0;
+    for (let i = 1; i < values.length; i++) {
+        const d = values[i] - values[i - 1];
+        if (d > 0) ups++;
+        else if (d < 0 && values[i] > resetFloor) downs++; // a drop that stays mid-range = genuine decrease
+    }
+    return ups >= 2 && downs === 0;
+}
+
 /* --- DATA PROCESSING --- */
 
 function parseState(val) {
@@ -423,7 +446,7 @@ function aggregateToDaily(historyData, isEnergy) {
         if (isNaN(pVal)) return;
         const val = pVal;
         const d = new Date(pt.last_changed);
-        const key = d.toISOString().split('T')[0];
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
         if (!groups[key]) groups[key] = { sum: 0, count: 0, min: val, max: val, values: [] };
 
@@ -448,7 +471,8 @@ function aggregateToDaily(historyData, isEnergy) {
         } else {
             yVal = g.sum / g.count;
         }
-        return { x: new Date(dateStr).getTime(), y: yVal };
+        const [yy, mm, dd] = dateStr.split('-').map(Number);
+        return { x: new Date(yy, mm - 1, dd).getTime(), y: yVal };
     });
 }
 
@@ -492,7 +516,12 @@ function processData(history, type, unit, startTime = null, cumulative = null) {
     });
     history = uniqueHistory;
 
-    const isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
+    let isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
+    if (!isEnergy && type === 'bar') {
+        // Auto-detect counter-style sensors (rise + reset) so their bars show consumption, not the average.
+        const nums = history.map(pt => parseState(pt.state)).filter(v => !isNaN(v));
+        if (looksLikeCounter(nums)) isEnergy = true;
+    }
     let dataPoints = [];
 
     if (history.length > 1) {
@@ -532,9 +561,12 @@ function processData(history, type, unit, startTime = null, cumulative = null) {
 
 /* --- HTML TEMPLATES (VIEWS) --- */
 
-function createStatsCard(conf, min, avg, max, curr, unit, label) {
+function createStatsCard(conf, min, avg, max, curr, unit, label, sumVal = null) {
     // --- UPDATED: Use alias if available ---
     const name = conf.alias || cleanName(conf.entityId);
+    const sumRow = (sumVal !== null && sumVal !== undefined)
+        ? `\n          <div class="stats-row"><span>${t('sum')}:</span> <span class="stats-main-val" style="color:${conf.color}">${sumVal} ${unit}</span></div>`
+        : '';
     return `
       <div class="stats-card" style="border-left-color: ${conf.color}">
           <div class="stats-header" title="${name}">${name}</div>
@@ -544,7 +576,7 @@ function createStatsCard(conf, min, avg, max, curr, unit, label) {
           </div>
           <div class="stats-row"><span>${t('min')}:</span> <span>${min}</span></div>
           <div class="stats-row"><span>${t('avg')}:</span> <span>${avg}</span></div>
-          <div class="stats-row"><span>${t('max')}:</span> <span>${max}</span></div>
+          <div class="stats-row"><span>${t('max')}:</span> <span>${max}</span></div>${sumRow}
       </div>
    `;
 }
@@ -583,12 +615,15 @@ function getSplitCardHTML(index, color, name, isCard) {
     `;
 }
 
-function getSplitStatsHTML(displayLabel, color, displayVal, unit, min, avg, max) {
+function getSplitStatsHTML(displayLabel, color, displayVal, unit, min, avg, max, sumVal = null) {
+    const sumBlock = (sumVal !== null && sumVal !== undefined)
+        ? `\n       <div><div class="stat-label">${t('sum')}</div><div class="stat-current" style="color:${color}">${sumVal} <span class="stat-unit">${unit}</span></div></div>`
+        : '';
     return `
        <div><div class="stat-label">${displayLabel}</div><div class="stat-current" style="color:${color}">${displayVal} <span class="stat-unit">${unit}</span></div></div>
        <div><div class="stat-label">${t('min')}</div><div class="stat-value" style="font-size:1em">${min}</div></div>
        <div><div class="stat-label">${t('avg')}</div><div class="stat-value" style="font-size:1em">${avg}</div></div>
-       <div><div class="stat-label">${t('max')}</div><div class="stat-value" style="font-size:1em">${max}</div></div>
+       <div><div class="stat-label">${t('max')}</div><div class="stat-value" style="font-size:1em">${max}</div></div>${sumBlock}
     `;
 }
 
@@ -884,7 +919,8 @@ function getPanelTemplate() {
         
         .split-footer { display: flex; gap: 20px; margin-top: 10px; align-items: stretch; border-top: 1px solid var(--divider-color); padding-top: 15px; }
         
-        .split-stats-box { flex-grow: 1; background: transparent; border-radius: 0; padding: 5px 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; text-align: center; border: none; }
+        .split-stats-box { flex-grow: 1; background: transparent; border-radius: 0; padding: 5px 0; display: flex; flex-wrap: nowrap; gap: 8px; text-align: center; border: none; }
+        .split-stats-box > div { flex: 1 1 0; min-width: 0; }
         .split-controls-box { width: auto; display: flex; flex-direction: row; gap: 5px; justify-content: flex-start; border-left: 1px solid var(--divider-color); padding-left: 15px; align-items: center; }
         .chart-toggle-btn { background: transparent; border: 1px solid var(--divider-color); color: var(--secondary-text-color); width: 32px; height: 32px; padding: 0; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         .chart-toggle-btn:hover { background: rgba(0,0,0,0.05); color: var(--primary-text-color); }
@@ -1103,6 +1139,7 @@ function getPanelTemplate() {
 					<option value="12">${t('last12Hours')}</option>
 					<option value="24" selected>${t('last24Hours')}</option>
 					<option value="48">${t('last48Hours')}</option>
+					<option value="72">${t('last3Days')}</option>
 					<option value="168">${t('last7Days')}</option>
 					<option value="720">${t('last30Days')}</option>
 					<option value="2160">${t('last3Months')}</option>
@@ -1124,6 +1161,7 @@ function getPanelTemplate() {
 		  </div>	  
           <div class="saved-views-section"><label>${t('savedViews')}</label><div id="saved-views-container"></div></div>
           <div class="error-msg" id="error-msg"></div>
+          <div class="panel-version" style="margin-top:auto; border-top:1px solid var(--divider-color); padding-top:10px; text-align:center; font-size:11px; letter-spacing:0.5px; color:var(--secondary-text-color);">${PANEL_VERSION}</div>
         </div>
         
         <div class="main-content" id="main-content-area"></div>
@@ -1328,7 +1366,7 @@ requireChartjsPluginZoom_min();
 
 /* detailed-charts-panel-logic.js */
 console.log(
-    "%c📉 DetailedChartsPanelLogic: v_2.7 ready",
+    "%c📉 DetailedChartsPanelLogic: v_2.8 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -1533,7 +1571,7 @@ class DetailedChartsLogic extends HTMLElement {
         });
 
         // 2. Statistiken neu berechnen (Footer & Top)
-        const calcStats = (points, unit, type, precision = 2) => {
+        const calcStats = (points, unit, type, precision = 2, entityId = null) => {
             const values = points.map(p => p.y);
             const min = values.length ? Math.min(...values) : 0;
             const max = values.length ? Math.max(...values) : 0;
@@ -1541,16 +1579,13 @@ class DetailedChartsLogic extends HTMLElement {
             const avg = values.length ? (sum / values.length) : 0;
             const curr = values.length ? values[values.length - 1] : 0;
 
-            let displayVal = curr.toFixed(precision);
-
-            let displayLabel = t('current');
-            if (this._isCumulative(conf.entityId, unit)) {
+            let sumVal = null;
+            if (entityId && this._isCumulative(entityId, unit)) {
                 const hours = (endTime - startTime) / 3600000;
                 const isAggregated = (type === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
-            return { min: min.toFixed(precision), max: max.toFixed(precision), avg: avg.toFixed(precision), curr: displayVal, label: displayLabel };
+            return { min: min.toFixed(precision), max: max.toFixed(precision), avg: avg.toFixed(precision), curr: curr.toFixed(precision), label: t('current'), sum: sumVal };
         };
 
         // Update Split Cards (Footer)
@@ -1575,8 +1610,8 @@ class DetailedChartsLogic extends HTMLElement {
                             if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                         }
                         const precision = this._precisionFor(s.entityId);
-                        const stats = calcStats(points, unit, type, precision);
-                        footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max);
+                        const stats = calcStats(points, unit, type, precision, s.entityId);
+                        footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max, stats.sum);
                     }
                 }
             }
@@ -1599,8 +1634,8 @@ class DetailedChartsLogic extends HTMLElement {
                     if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                 }
                 const precision = this._precisionFor(s.entityId);
-                const stats = calcStats(points, unit, type, precision);
-                html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label);
+                const stats = calcStats(points, unit, type, precision, s.entityId);
+                html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label, stats.sum);
             });
             statsWrapper.innerHTML = html;
         }
@@ -1634,21 +1669,21 @@ class DetailedChartsLogic extends HTMLElement {
 
             let displayVal = curr.toFixed(precision);
             let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (xMax - xMin) / 3600000;
                 let type = conf.typeOverride || this.content.querySelector('#chart-type').value;
                 if (type === 'stackedArea') type = 'line';
                 if (this.stackedBars) type = 'bar';
                 const isAggregated = (type === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
 
             const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${sensorIndex}"]`);
             if (card) {
                 const footer = card.querySelector('.split-stats-box');
                 if (footer) {
-                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision));
+                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), sumVal);
                 }
             }
         } else {
@@ -1679,16 +1714,16 @@ class DetailedChartsLogic extends HTMLElement {
 
                 let displayVal = curr.toFixed(precision);
                 let displayLabel = t('current');
+                let sumVal = null;
                 if (this._isCumulative(conf.entityId, unit)) {
                     const hours = (xMax - xMin) / 3600000;
                     let type = this.content.querySelector('#chart-type').value;
                     if (type === 'stackedArea') type = 'line';
                     if (this.stackedBars) type = 'bar';
                     const isAggregated = (type === 'bar' && hours > 24);
-                    displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                    displayLabel = t('sum');
+                    sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                 }
-                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel);
+                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel, sumVal);
             });
             if (html) statsWrapper.innerHTML = html;
         }
@@ -1797,11 +1832,11 @@ class DetailedChartsLogic extends HTMLElement {
                         let displayVal = curr.toFixed(precision);
 
                         let displayLabel = t('current');
+                        let sumVal = null;
                         if (this._isCumulative(sensorConfig.entityId, unit)) {
                             const hours = (endTime - startTime) / 3600000;
                             const isAggregated = (currentType === 'bar' && hours > 24);
-                            displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                            displayLabel = t('sum');
+                            sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                         }
 
                         footer.innerHTML = getSplitStatsHTML(
@@ -1811,7 +1846,8 @@ class DetailedChartsLogic extends HTMLElement {
                             unit,
                             min.toFixed(precision),
                             avg.toFixed(precision),
-                            max.toFixed(precision)
+                            max.toFixed(precision),
+                            sumVal
                         );
                     }
                 }
@@ -1965,6 +2001,21 @@ class DetailedChartsLogic extends HTMLElement {
             }
         });
 
+        const legendItems = [];
+        // Recalculate the total sum and each slice's percentage from the currently VISIBLE slices.
+        const updateDonutTotals = () => {
+            const meta = chart.getDatasetMeta(0);
+            let vis = 0;
+            values.forEach((v, j) => { if (!meta.data[j] || !meta.data[j].hidden) vis += v; });
+            if (totalContainer) totalContainer.textContent = `${vis.toFixed(2)} ${units[0] || ''}`;
+            legendItems.forEach((el, j) => {
+                const hidden = !!(meta.data[j] && meta.data[j].hidden);
+                const right = el.querySelector('.donut-legend-right');
+                if (right) right.textContent = hidden ? '\u2014' : `${(vis > 0 ? (values[j] / vis * 100) : 0).toFixed(1)}%`;
+                el.classList.toggle('hidden', hidden);
+            });
+        };
+
         if (legendContainer) {
             legendContainer.innerHTML = '';
             labels.forEach((label, i) => {
@@ -1981,11 +2032,11 @@ class DetailedChartsLogic extends HTMLElement {
                 `;
                 item.onclick = () => {
                     const meta = chart.getDatasetMeta(0);
-                    const currentHidden = meta.data[i].hidden;
-                    meta.data[i].hidden = !currentHidden;
-                    item.classList.toggle('hidden', !currentHidden);
+                    meta.data[i].hidden = !meta.data[i].hidden;
                     chart.update();
+                    updateDonutTotals();
                 };
+                legendItems.push(item);
                 legendContainer.appendChild(item);
             });
         }
@@ -2095,13 +2146,13 @@ class DetailedChartsLogic extends HTMLElement {
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (et - st) / 3600000;
                 const isAggregated = (effectiveType === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
-            allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel);
+            allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel, sumVal);
 
             const isStackMember = isStackedArea && !isBinary && !useRightAxis;
 
@@ -2324,16 +2375,16 @@ class DetailedChartsLogic extends HTMLElement {
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const isAggregated = (currentType === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
 
             const footer = card.querySelector(`#footer-${idx}`);
             const statsBox = footer.querySelector('.split-stats-box');
             if (this.showStats) {
-                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision), sumVal);
                 statsBox.style.display = '';
             } else {
                 statsBox.style.display = 'none';
@@ -2885,7 +2936,7 @@ class DetailedChartsLogic extends HTMLElement {
 
 /* detailed-charts-panel.js */
 console.log(
-    "%c📉️ DetailedChartsPanel: v_2.7 ready",
+    "%c📉️ DetailedChartsPanel: v_2.8 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -4248,7 +4299,7 @@ window.customCards.push({
 
 /* detailed-charts-panel-editor.js */
 console.log(
-    "%c📉️ DetailedChartsPanelEditor: v_2.7 ready",
+    "%c📉️ DetailedChartsPanelEditor: v_2.8 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
