@@ -1,6 +1,6 @@
 /* detailed-charts-panel-editor.js */
 console.log(
-    "%c📉️ DetailedChartsPanelEditor: v_2.7 ready",
+    "%c📉️ DetailedChartsPanelEditor: v_2.8 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 

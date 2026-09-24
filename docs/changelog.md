@@ -3,6 +3,20 @@
 All notable changes to the **Detailed Charts Panel** are documented in this file.
 The format is loosely based on *Keep a Changelog*. Dates use the `YYYY-MM-DD` format.
 
+## v_2.8 – 2026-09-24
+
+### Added
+- **Sum in the statistics:** When statistics are enabled, the cards now also show the SUM for the selected period (for energy, water and other counting sensors), alongside current / min / average / max.
+- **"Last 3 days" range:** New quick option in the time-range selector.
+- **Version indicator:** The current version is now shown at the bottom of the sidebar.
+
+### Fixed
+- **Counter sensors in bar charts:** Sensors that count up and then reset (for example an `input_number` helper, or any counter without a `kWh` unit or a `total_increasing` state class) are now aggregated as consumption per period in the bar view, so the bars match the line view instead of showing roughly half (the daily average). Measurement sensors such as temperature or power are not affected.
+- **Daily bars use local time:** Daily bar aggregation now groups by the local calendar day instead of UTC, fixing small deviations near midnight.
+- **Donut sidebar total:** The total sum and each slice's percentage now recalculate when you hide or show a sensor via the donut legend.
+- **Statistics after scrolling:** Fixed an internal error that could stop the split-card statistics from refreshing after panning or scrolling the time range.
+- **Single-row statistics footer:** In the split charts, current / min / average / max / sum now stay on one row instead of wrapping to a second line.
+
 ## v_2.7 – 2026-09-07
 
 ### Added

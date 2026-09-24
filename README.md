@@ -3,6 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/jayjojayson/detailed-charts-panel?include_prereleases&sort=semver&color=blue&style=flat-square)](https://github.com/jayjojayson/detailed-charts-panel/releases/)
 ![Panel Size](https://img.shields.io/badge/Panel%20Size-427%20kB-blue)
 [![README Deutsch](https://img.shields.io/badge/README-DE-orange)](https://github.com/jayjojayson/detailed-charts-panel/blob/main/docs/README-de.md)
+![Downloads](https://img.shields.io/github/downloads/jayjojayson/detailed-charts-panel/total?label=Downloads&color=blue)
 [![Support](https://img.shields.io/badge/%20-Support%20Me-steelblue?style=flat&logo=paypal&logoColor=white)](https://www.paypal.me/quadFlyerFW)
 [![stars](https://img.shields.io/github/stars/jayjojayson/detailed-charts-panel)](https://github.com/jayjojayson/detailed-charts-panel/stargazers)
 

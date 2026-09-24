@@ -58,6 +58,7 @@ export const en = {
     last12Hours: "Last 12 Hours",
     last24Hours: "Last 24 Hours",
     last48Hours: "Last 48 Hours",
+    last3Days: "Last 3 Days",
     last7Days: "Last 7 Days",
     last30Days: "Last 30 Days (Month)",
     last3Months: "Last 3 Months",

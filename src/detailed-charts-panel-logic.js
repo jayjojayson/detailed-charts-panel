@@ -1,6 +1,6 @@
 /* detailed-charts-panel-logic.js */
 console.log(
-    "%c📉 DetailedChartsPanelLogic: v_2.7 ready",
+    "%c📉 DetailedChartsPanelLogic: v_2.8 ready",
     "background: #5596c5; color: #000; padding: 2px 6px; border-radius: 4px; font-weight: bold;"
 );
 
@@ -225,7 +225,7 @@ export class DetailedChartsLogic extends HTMLElement {
         });
 
         // 2. Statistiken neu berechnen (Footer & Top)
-        const calcStats = (points, unit, type, precision = 2) => {
+        const calcStats = (points, unit, type, precision = 2, entityId = null) => {
             const values = points.map(p => p.y);
             const min = values.length ? Math.min(...values) : 0;
             const max = values.length ? Math.max(...values) : 0;
@@ -233,16 +233,13 @@ export class DetailedChartsLogic extends HTMLElement {
             const avg = values.length ? (sum / values.length) : 0;
             const curr = values.length ? values[values.length - 1] : 0;
 
-            let displayVal = curr.toFixed(precision);
-
-            let displayLabel = t('current');
-            if (this._isCumulative(conf.entityId, unit)) {
+            let sumVal = null;
+            if (entityId && this._isCumulative(entityId, unit)) {
                 const hours = (endTime - startTime) / 3600000;
                 const isAggregated = (type === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
-            return { min: min.toFixed(precision), max: max.toFixed(precision), avg: avg.toFixed(precision), curr: displayVal, label: displayLabel };
+            return { min: min.toFixed(precision), max: max.toFixed(precision), avg: avg.toFixed(precision), curr: curr.toFixed(precision), label: t('current'), sum: sumVal };
         };
 
         // Update Split Cards (Footer)
@@ -267,8 +264,8 @@ export class DetailedChartsLogic extends HTMLElement {
                             if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                         }
                         const precision = this._precisionFor(s.entityId);
-                        const stats = calcStats(points, unit, type, precision);
-                        footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max);
+                        const stats = calcStats(points, unit, type, precision, s.entityId);
+                        footer.innerHTML = getSplitStatsHTML(stats.label, s.color, stats.curr, unit, stats.min, stats.avg, stats.max, stats.sum);
                     }
                 }
             }
@@ -291,8 +288,8 @@ export class DetailedChartsLogic extends HTMLElement {
                     if (unit === 'Wh' || unit === 'kWh') points = points.map(p => ({ x: p.x, y: p.y / 1000 }));
                 }
                 const precision = this._precisionFor(s.entityId);
-                const stats = calcStats(points, unit, type, precision);
-                html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label);
+                const stats = calcStats(points, unit, type, precision, s.entityId);
+                html += createStatsCard(s, stats.min, stats.avg, stats.max, stats.curr, unit, stats.label, stats.sum);
             });
             statsWrapper.innerHTML = html;
         }
@@ -326,21 +323,21 @@ export class DetailedChartsLogic extends HTMLElement {
 
             let displayVal = curr.toFixed(precision);
             let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (xMax - xMin) / 3600000;
                 let type = conf.typeOverride || this.content.querySelector('#chart-type').value;
                 if (type === 'stackedArea') type = 'line';
                 if (this.stackedBars) type = 'bar';
                 const isAggregated = (type === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
 
             const card = this.shadowRoot.querySelector(`.split-chart-card[data-index="${sensorIndex}"]`);
             if (card) {
                 const footer = card.querySelector('.split-stats-box');
                 if (footer) {
-                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision));
+                    footer.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), sumVal);
                 }
             }
         } else {
@@ -371,16 +368,16 @@ export class DetailedChartsLogic extends HTMLElement {
 
                 let displayVal = curr.toFixed(precision);
                 let displayLabel = t('current');
+                let sumVal = null;
                 if (this._isCumulative(conf.entityId, unit)) {
                     const hours = (xMax - xMin) / 3600000;
                     let type = this.content.querySelector('#chart-type').value;
                     if (type === 'stackedArea') type = 'line';
                     if (this.stackedBars) type = 'bar';
                     const isAggregated = (type === 'bar' && hours > 24);
-                    displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                    displayLabel = t('sum');
+                    sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                 }
-                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel);
+                html += createStatsCard(conf, min.toFixed(precision), avg.toFixed(precision), max.toFixed(precision), displayVal, unit, displayLabel, sumVal);
             });
             if (html) statsWrapper.innerHTML = html;
         }
@@ -489,11 +486,11 @@ export class DetailedChartsLogic extends HTMLElement {
                         let displayVal = curr.toFixed(precision);
 
                         let displayLabel = t('current');
+                        let sumVal = null;
                         if (this._isCumulative(sensorConfig.entityId, unit)) {
                             const hours = (endTime - startTime) / 3600000;
                             const isAggregated = (currentType === 'bar' && hours > 24);
-                            displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                            displayLabel = t('sum');
+                            sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
                         }
 
                         footer.innerHTML = getSplitStatsHTML(
@@ -503,7 +500,8 @@ export class DetailedChartsLogic extends HTMLElement {
                             unit,
                             min.toFixed(precision),
                             avg.toFixed(precision),
-                            max.toFixed(precision)
+                            max.toFixed(precision),
+                            sumVal
                         );
                     }
                 }
@@ -657,6 +655,21 @@ export class DetailedChartsLogic extends HTMLElement {
             }
         });
 
+        const legendItems = [];
+        // Recalculate the total sum and each slice's percentage from the currently VISIBLE slices.
+        const updateDonutTotals = () => {
+            const meta = chart.getDatasetMeta(0);
+            let vis = 0;
+            values.forEach((v, j) => { if (!meta.data[j] || !meta.data[j].hidden) vis += v; });
+            if (totalContainer) totalContainer.textContent = `${vis.toFixed(2)} ${units[0] || ''}`;
+            legendItems.forEach((el, j) => {
+                const hidden = !!(meta.data[j] && meta.data[j].hidden);
+                const right = el.querySelector('.donut-legend-right');
+                if (right) right.textContent = hidden ? '\u2014' : `${(vis > 0 ? (values[j] / vis * 100) : 0).toFixed(1)}%`;
+                el.classList.toggle('hidden', hidden);
+            });
+        };
+
         if (legendContainer) {
             legendContainer.innerHTML = '';
             labels.forEach((label, i) => {
@@ -673,11 +686,11 @@ export class DetailedChartsLogic extends HTMLElement {
                 `;
                 item.onclick = () => {
                     const meta = chart.getDatasetMeta(0);
-                    const currentHidden = meta.data[i].hidden;
-                    meta.data[i].hidden = !currentHidden;
-                    item.classList.toggle('hidden', !currentHidden);
+                    meta.data[i].hidden = !meta.data[i].hidden;
                     chart.update();
+                    updateDonutTotals();
                 };
+                legendItems.push(item);
                 legendContainer.appendChild(item);
             });
         }
@@ -787,13 +800,13 @@ export class DetailedChartsLogic extends HTMLElement {
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const hours = (et - st) / 3600000;
                 const isAggregated = (effectiveType === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
-            allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel);
+            allStatsHTML += createStatsCard(conf, min.toFixed(precision), avg, max.toFixed(precision), displayVal, unit, displayLabel, sumVal);
 
             const isStackMember = isStackedArea && !isBinary && !useRightAxis;
 
@@ -1016,16 +1029,16 @@ export class DetailedChartsLogic extends HTMLElement {
             const avg = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(precision);
             const curr = values[values.length - 1].toFixed(precision);
             let displayVal = curr; let displayLabel = t('current');
+            let sumVal = null;
             if (this._isCumulative(conf.entityId, unit)) {
                 const isAggregated = (currentType === 'bar' && hours > 24);
-                displayVal = calculateEnergySum(values, isAggregated).toFixed(precision);
-                displayLabel = t('sum');
+                sumVal = calculateEnergySum(values, isAggregated).toFixed(precision);
             }
 
             const footer = card.querySelector(`#footer-${idx}`);
             const statsBox = footer.querySelector('.split-stats-box');
             if (this.showStats) {
-                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision));
+                statsBox.innerHTML = getSplitStatsHTML(displayLabel, conf.color, displayVal, unit, min.toFixed(precision), avg, max.toFixed(precision), sumVal);
                 statsBox.style.display = '';
             } else {
                 statsBox.style.display = 'none';

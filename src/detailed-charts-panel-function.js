@@ -2,6 +2,8 @@
 
 import { t } from './detailed-charts-panel-langs.js';
 
+export const PANEL_VERSION = 'v2.8';
+
 /* --- HELPER FUNCTIONS --- */
 
 export function cleanName(name) {
@@ -77,6 +79,25 @@ export function isCumulativeSensor(unit, stateClass) {
     return !!(unit && (unit.includes('Wh') || unit.includes('kWh')));
 }
 
+/* Heuristic: does this numeric series behave like an ever-increasing counter (rises, then
+   resets back to its baseline)? Used to aggregate such sensors as consumption in bar charts,
+   even when they carry no state_class/kWh unit (e.g. an input_number helper that counts up).
+   A measurement sensor (temperature, power) keeps dipping mid-range and is therefore NOT matched. */
+function looksLikeCounter(values) {
+    if (!values || values.length < 5) return false;
+    let min = values[0], max = values[0];
+    for (let i = 1; i < values.length; i++) { if (values[i] < min) min = values[i]; if (values[i] > max) max = values[i]; }
+    if (!(max > min)) return false;
+    const resetFloor = min + 0.15 * (max - min);
+    let ups = 0, downs = 0;
+    for (let i = 1; i < values.length; i++) {
+        const d = values[i] - values[i - 1];
+        if (d > 0) ups++;
+        else if (d < 0 && values[i] > resetFloor) downs++; // a drop that stays mid-range = genuine decrease
+    }
+    return ups >= 2 && downs === 0;
+}
+
 /* --- DATA PROCESSING --- */
 
 function parseState(val) {
@@ -98,7 +119,7 @@ function aggregateToDaily(historyData, isEnergy) {
         if (isNaN(pVal)) return;
         const val = pVal;
         const d = new Date(pt.last_changed);
-        const key = d.toISOString().split('T')[0];
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
         if (!groups[key]) groups[key] = { sum: 0, count: 0, min: val, max: val, values: [] };
 
@@ -123,7 +144,8 @@ function aggregateToDaily(historyData, isEnergy) {
         } else {
             yVal = g.sum / g.count;
         }
-        return { x: new Date(dateStr).getTime(), y: yVal };
+        const [yy, mm, dd] = dateStr.split('-').map(Number);
+        return { x: new Date(yy, mm - 1, dd).getTime(), y: yVal };
     });
 }
 
@@ -167,7 +189,12 @@ export function processData(history, type, unit, startTime = null, cumulative = 
     });
     history = uniqueHistory;
 
-    const isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
+    let isEnergy = (cumulative !== null && cumulative !== undefined) ? !!cumulative : (unit && (unit.includes("Wh") || unit.includes("kWh")));
+    if (!isEnergy && type === 'bar') {
+        // Auto-detect counter-style sensors (rise + reset) so their bars show consumption, not the average.
+        const nums = history.map(pt => parseState(pt.state)).filter(v => !isNaN(v));
+        if (looksLikeCounter(nums)) isEnergy = true;
+    }
     let dataPoints = [];
 
     if (history.length > 1) {
@@ -207,9 +234,12 @@ export function processData(history, type, unit, startTime = null, cumulative = 
 
 /* --- HTML TEMPLATES (VIEWS) --- */
 
-export function createStatsCard(conf, min, avg, max, curr, unit, label) {
+export function createStatsCard(conf, min, avg, max, curr, unit, label, sumVal = null) {
     // --- UPDATED: Use alias if available ---
     const name = conf.alias || cleanName(conf.entityId);
+    const sumRow = (sumVal !== null && sumVal !== undefined)
+        ? `\n          <div class="stats-row"><span>${t('sum')}:</span> <span class="stats-main-val" style="color:${conf.color}">${sumVal} ${unit}</span></div>`
+        : '';
     return `
       <div class="stats-card" style="border-left-color: ${conf.color}">
           <div class="stats-header" title="${name}">${name}</div>
@@ -219,7 +249,7 @@ export function createStatsCard(conf, min, avg, max, curr, unit, label) {
           </div>
           <div class="stats-row"><span>${t('min')}:</span> <span>${min}</span></div>
           <div class="stats-row"><span>${t('avg')}:</span> <span>${avg}</span></div>
-          <div class="stats-row"><span>${t('max')}:</span> <span>${max}</span></div>
+          <div class="stats-row"><span>${t('max')}:</span> <span>${max}</span></div>${sumRow}
       </div>
    `;
 }
@@ -258,12 +288,15 @@ export function getSplitCardHTML(index, color, name, isCard) {
     `;
 }
 
-export function getSplitStatsHTML(displayLabel, color, displayVal, unit, min, avg, max) {
+export function getSplitStatsHTML(displayLabel, color, displayVal, unit, min, avg, max, sumVal = null) {
+    const sumBlock = (sumVal !== null && sumVal !== undefined)
+        ? `\n       <div><div class="stat-label">${t('sum')}</div><div class="stat-current" style="color:${color}">${sumVal} <span class="stat-unit">${unit}</span></div></div>`
+        : '';
     return `
        <div><div class="stat-label">${displayLabel}</div><div class="stat-current" style="color:${color}">${displayVal} <span class="stat-unit">${unit}</span></div></div>
        <div><div class="stat-label">${t('min')}</div><div class="stat-value" style="font-size:1em">${min}</div></div>
        <div><div class="stat-label">${t('avg')}</div><div class="stat-value" style="font-size:1em">${avg}</div></div>
-       <div><div class="stat-label">${t('max')}</div><div class="stat-value" style="font-size:1em">${max}</div></div>
+       <div><div class="stat-label">${t('max')}</div><div class="stat-value" style="font-size:1em">${max}</div></div>${sumBlock}
     `;
 }
 
@@ -559,7 +592,8 @@ export function getPanelTemplate() {
         
         .split-footer { display: flex; gap: 20px; margin-top: 10px; align-items: stretch; border-top: 1px solid var(--divider-color); padding-top: 15px; }
         
-        .split-stats-box { flex-grow: 1; background: transparent; border-radius: 0; padding: 5px 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; text-align: center; border: none; }
+        .split-stats-box { flex-grow: 1; background: transparent; border-radius: 0; padding: 5px 0; display: flex; flex-wrap: nowrap; gap: 8px; text-align: center; border: none; }
+        .split-stats-box > div { flex: 1 1 0; min-width: 0; }
         .split-controls-box { width: auto; display: flex; flex-direction: row; gap: 5px; justify-content: flex-start; border-left: 1px solid var(--divider-color); padding-left: 15px; align-items: center; }
         .chart-toggle-btn { background: transparent; border: 1px solid var(--divider-color); color: var(--secondary-text-color); width: 32px; height: 32px; padding: 0; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         .chart-toggle-btn:hover { background: rgba(0,0,0,0.05); color: var(--primary-text-color); }
@@ -778,6 +812,7 @@ export function getPanelTemplate() {
 					<option value="12">${t('last12Hours')}</option>
 					<option value="24" selected>${t('last24Hours')}</option>
 					<option value="48">${t('last48Hours')}</option>
+					<option value="72">${t('last3Days')}</option>
 					<option value="168">${t('last7Days')}</option>
 					<option value="720">${t('last30Days')}</option>
 					<option value="2160">${t('last3Months')}</option>
@@ -799,6 +834,7 @@ export function getPanelTemplate() {
 		  </div>	  
           <div class="saved-views-section"><label>${t('savedViews')}</label><div id="saved-views-container"></div></div>
           <div class="error-msg" id="error-msg"></div>
+          <div class="panel-version" style="margin-top:auto; border-top:1px solid var(--divider-color); padding-top:10px; text-align:center; font-size:11px; letter-spacing:0.5px; color:var(--secondary-text-color);">${PANEL_VERSION}</div>
         </div>
         
         <div class="main-content" id="main-content-area"></div>
